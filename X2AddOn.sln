@@ -5,7 +5,7 @@ VisualStudioVersion = 12.0.30110.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "X2AddOn", "X2AddOn\X2AddOn.vcxproj", "{77481765-C6BE-4526-AB2A-7B02B5338B3E}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "age2_x2_1", "age2_x2_1\age2_x2_1.vcxproj", "{15469C5A-C075-4FA8-86A1-73B92AF345DA}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "age2_x2", "age2_x2\age2_x2.vcxproj", "{15469C5A-C075-4FA8-86A1-73B92AF345DA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

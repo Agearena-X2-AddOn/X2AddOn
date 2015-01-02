@@ -34,7 +34,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	// Pfad zur DLL
 	char dllpath[MAX_STRING_LENGTH + 1] = { 0 };
-	_snprintf_s(dllpath, MAX_STRING_LENGTH, MAX_STRING_LENGTH, "age2_x2_1.dll");
+	_snprintf_s(dllpath, MAX_STRING_LENGTH, MAX_STRING_LENGTH, "age2_x2.dll");
 
 	// Prozessstart-Variablen
 	STARTUPINFO si = { sizeof(STARTUPINFO) };

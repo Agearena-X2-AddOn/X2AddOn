@@ -1,4 +1,4 @@
-Dieser Launcher startet den age2_x1-Prozess und injiziert in diesen die DLL-Datei(en) mit den jeweiligen Code-Modifikationen.
+Dieser Launcher startet den age2_x1-Prozess und injiziert in diesen die DLL-Datei mit den Code-Modifikationen.
 
 Diese Software steht unter der MIT-Lizenz. Nähere Informationen sind der beigelegten LICENSE-Datei zu entnehmen.
 

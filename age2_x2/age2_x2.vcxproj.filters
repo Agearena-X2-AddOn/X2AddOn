@@ -15,10 +15,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="age2_x2_1.cpp">
+    <ClCompile Include="functions.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
-    <ClCompile Include="functions.cpp">
+    <ClCompile Include="age2_x2.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
   </ItemGroup>

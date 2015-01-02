@@ -23,7 +23,7 @@ void CopyBytesToAddr(DWORD destAddr, void *data, size_t byteCount)
 	VirtualProtect((void *)destAddr, byteCount, pageProtectOld, &pageProtectOld);
 }
 
-void Codecave(DWORD destAddr, void(*func)(void), size_t nopCount)
+void CreateCodecave(DWORD destAddr, void(*func)(void), size_t nopCount)
 {
 	// Relativen Sprung-Offset berechnen
 	// Die 5 Bytes des call-Befehls müssen berücksichtigt werden!
