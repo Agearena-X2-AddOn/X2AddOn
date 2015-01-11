@@ -20,7 +20,7 @@
 // Parameter:
 // -> destAddr: Die Adresse, an der Sprung eingefügt werden soll.
 // -> func: Die auszuführende Codecave-Funktion.
-// -> nopCount: Die Anzahl der einzufügenden NOPs.
+// -> nopCount: Die Anzahl der einzufügenden NOPs nach den 5 CALL-Bytes.
 void CreateCodecave(DWORD destAddr, void(*func)(void), size_t nopCount);
 
 // Kopiert die angegeben Daten an eine Zieladresse.
