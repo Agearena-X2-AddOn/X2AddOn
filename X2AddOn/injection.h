@@ -211,12 +211,6 @@ void InjectDLL(HANDLE process, const char* dllPath, const char* dllFunc)
 		mem[memPos++] = 0xD0;
 	}
 
-	// mov [addr], eax
-	// -> Inject-DLL-Adresse in Speicher ablegen
-	mem[memPos++] = 0xA3;
-	memcpy(mem + memPos, &dllAddr, 4);
-	memPos += 4;
-
 	// push addr
 	// -> Adresse der Initialisierungsfunktion für GetProcAddress auf den Stack legen
 	mem[memPos++] = 0x68;

@@ -28,6 +28,7 @@ DWORD _funcUnknown3 = 0x00403996;
 DWORD _funcUnknown4 = 0x004038ED;
 DWORD _funcUnknown5 = 0x00403A2E;
 DWORD _funcUnknown6 = 0x0040244D;
+DWORD _funcCreateButton = 0x00520620; // Erstellt einen neuen Einheiten-Interface-Button.
 
 // Zeitalter-Konstanten
 float RESEARCH_ID_DUNKEL = 105.0f;
@@ -35,6 +36,14 @@ float RESEARCH_ID_FEUDAL = 101.0f;
 float RESEARCH_ID_RITTER = 102.0f;
 float RESEARCH_ID_IMPERIAL = 103.0f;
 float RESEARCH_ID_RENAISSANCE = 104.0f;
+
+// Zeitalter-Konstanten für Zeitalter-Ressource
+float AGE_RESOURCE_DUNKEL = 0.0f;
+float AGE_RESOURCE_FEUDAL = 1.0f;
+float AGE_RESOURCE_RITTER = 2.0f;
+float AGE_RESOURCE_IMPERIAL = 3.0f;
+float AGE_RESOURCE_RENAISSANCE = 4.0f;
+
 
 
 /* CODECAVE-FUNKTIONEN */
@@ -81,6 +90,219 @@ __declspec(naked) void CC_ExtendSelfHealing()
 
 		// Rücksprungadresse wieder auf den Stack legen
 		push _retAddr_ExtendSelfHealing;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Aktiviert die zweite Gebäude-Seite für gegebene Gebäude.
+DWORD _retAddr_EnableSecondBuildingPage = 0;
+__declspec(naked) void CC_EnableSecondBuildingPage()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_EnableSecondBuildingPage;
+
+		// Hafen
+	hafen:
+		cmp word ptr[edx + 0x10], 45;
+		jne festung;
+
+		// Zeitalter-ID abrufen
+		mov eax, [edi + 0x0C];
+		mov ecx, [eax + 0x000000A8];
+		fld dword ptr[ecx + 0x18];
+
+		// Zeitalter prüfen
+		fcomp AGE_RESOURCE_DUNKEL;
+		fnstsw ax;
+		test ah, 0x41;
+		jne end;
+
+		// Button erstellen!
+		jmp create_button;
+
+		// Festung
+	festung:
+		cmp word ptr[edx + 0x10], 82;
+		jne end;
+
+		// Zeitalter-ID abrufen
+		mov eax, [edi + 0x0C];
+		mov ecx, [eax + 0x000000A8];
+		fld dword ptr[ecx + 0x18];
+
+		// Zeitalter prüfen
+		fcomp AGE_RESOURCE_IMPERIAL;
+		fnstsw ax;
+		test ah, 0x41;
+		jne end;
+
+		// Button erstellen
+	create_button:
+		push 0x00;
+		push 0x00;
+		mov edx, [esi + 0x00001020];
+		push 0x00;
+		push 0x00;
+		push 0x00;
+		push 0xFF;
+		push 0x00001336; // Hilfetext
+		push 0x00;
+		push 0x000000AA;
+		push 0x20; // Pfeil-Icon
+		push 0x0E; // Unten rechts in der Ecke platzieren
+		push edx;
+		mov ecx, esi;
+		call _funcCreateButton;
+
+	end:
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_EnableSecondBuildingPage;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Aktiviert die Ausladefunktion für die Transportkutsche unabhängig von der Einheitenklasse.
+DWORD _retAddr_TransportCartUnloadIcon = 0;
+__declspec(naked) void CC_TransportCartUnloadIcon()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_TransportCartUnloadIcon;
+
+		mov edx, [esp + 0x14];
+		xor ebx, ebx;
+		mov eax, [edx + 0x00000268];
+		test eax, eax;
+		jle cancel;
+		mov eax, edx;
+		lea edi, [eax + 0x000001C4];
+
+	begin:
+		mov ecx, [edi];
+		test ecx, ecx;
+		je label1;
+		mov edx, [ecx + 0x08];
+
+		// Transportschiff-ID?
+		cmp word ptr[edx + 0x10], 545;
+		je branch_ship;
+
+		// Transportkutsche-ID?
+		cmp word ptr[edx + 0x10], 954;
+		je branch_cart;
+		jmp label1;
+
+		// Block für das Transportschiff
+	branch_ship:
+		mov eax, [ecx];
+		call dword ptr[eax + 0x00000218];
+		test eax, eax;
+		jg create_button_ship;
+		jmp label1;
+
+		// Block für die Transportkutsche
+	branch_cart:
+		mov eax, [ecx];
+		call dword ptr[eax + 0x00000218];
+		test eax, eax;
+		jg create_button_cart;
+
+	label1:
+		mov ecx, [esp + 0x14];
+		inc ebx;
+		add edi, 0x04;
+		cmp ebx, [ecx + 0x00000268];
+		jnge begin;
+		jmp cancel;
+
+		// Transportschiff-Button erstellen
+	create_button_ship:
+		mov ecx, [esp + 0x18];
+		push 0x00;
+		push 0x00;
+		push 0x00;
+		push 0x00;
+		push 0x00;
+		push 0xFF;
+		push 4907;
+		mov eax, ecx;
+		push 0x00;
+		inc ecx;
+		push 0x07;
+		push 0x11;
+		jmp end;
+
+		// Transportkutsche-Button erstellen
+	create_button_cart:
+		mov ecx, [esp + 0x18];
+		push 0x00;
+		push 0x00;
+		push 0x00;
+		push 0x00;
+		push 0x00;
+		push 0xFF;
+		push 4948;
+		mov eax, ecx;
+		push 0x00;
+		inc ecx;
+		push 0x07;
+		push 0x45;
+		jmp end;
+
+		// Abbrechen (falsche ID o.ä.)
+	cancel:
+		mov _retAddr_TransportCartUnloadIcon, 0x00525FDF;
+
+	end:
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_TransportCartUnloadIcon;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Aktiviert das Steg-Symbol, wenn eine Einheit in die Kutsche geladen werden kann.
+DWORD _retAddr_TransportCartLoadCommand = 0;
+__declspec(naked) void CC_TransportCartLoadCommand()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_TransportCartLoadCommand;
+
+		// Rammbock?
+		cmp eax, 0x23;
+		je end;
+
+		// Sturmbock?
+		cmp eax, 0x000001A6;
+		je end;
+
+		// Belagerungsramme?
+		cmp eax, 0x00000224;
+		je end;
+
+		// Kleine Transportkutsche?
+		cmp eax, 0x000003BA;
+		je end;
+
+		// Nicht gefunden, woanders hinspringen
+		mov _retAddr_TransportCartLoadCommand, 0x0045B29B;
+
+	end:
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_TransportCartLoadCommand;
 
 		// Fertig
 		ret;
@@ -1132,7 +1354,7 @@ __declspec(naked) void CC_Renaissance12()
 }
 
 // Codecave-Funktion.
-// Überschreibt den Zeitalter-Aufruf beim Verstellen des Startzeitalters im Karteneditor.
+// Überschreibt den Aufruf zur Füllung der Startzeitalter-ComboBox im Editor.
 DWORD _retAddr_Renaissance13 = 0;
 __declspec(naked) void CC_Renaissance13()
 {
@@ -1164,7 +1386,7 @@ __declspec(naked) void CC_Renaissance13()
 		push 5;
 		push 0x0000106C;
 		call _funcComboBoxCreateEntry2;
-		
+
 		// Renaissance
 		mov ecx, [esi + 0x00000A34];
 		push 6;
@@ -1206,6 +1428,9 @@ extern "C" __declspec(dllexport) void Init()
 
 	// Codecaves erstellen
 	CreateCodecave(0x004C1795, CC_ExtendSelfHealing, 5);
+	CreateCodecave(0x00528307, CC_EnableSecondBuildingPage, 69);
+	CreateCodecave(0x00525F58, CC_TransportCartUnloadIcon, 103);
+	CreateCodecave(0x0045B7D1, CC_TransportCartLoadCommand, 18);
 	CreateCodecave(0x0040259A, CC_Renaissance1, 141);
 	CreateCodecave(0x005AAD61, CC_Renaissance2, 48);
 	CreateCodecave(0x0043FF59, CC_Renaissance3, 16);
@@ -1271,7 +1496,7 @@ extern "C" __declspec(dllexport) void Init()
 	// TODO: Einzelne Memory-Patches bei 2667+ (90er-Werte)?
 
 	// Fenster-Titel ändern für Preview
-	char *patchTitle = "X2-AddOn Alpha Preview\0\0\0\0\0";
+	char *patchTitle = "X2-AddOn Beta Dev Preview\0\0";
 	CopyBytesToAddr(0x0067B838, patchTitle, 27);
 }
 
