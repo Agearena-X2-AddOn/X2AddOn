@@ -1198,7 +1198,8 @@ __declspec(naked) void CC_Renaissance9()
 
 		// Berechnet die Technologie-ID des Endzeitalters.
 	calc_max_age_id:
-		mov edx, [0x7912A0];
+		xor edx, edx; // Workaround, da der Compiler irgendwie absolute Adressen nicht mag...
+		mov edx, [edx + 0x007912A0];
 		mov eax, [edx + 0x00001440];
 		shr eax, 3;
 		test eax, eax;

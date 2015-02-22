@@ -86,12 +86,6 @@ void InjectDLL(HANDLE process, const char* dllPath, const char* dllFunc)
 
 	// Hilfsvariable
 	DWORD tempSize = 0;
-	
-	// Platzhalter für Handle der injizierten DLL schreiben
-	DWORD dllAddr = memProcAddrVal + memPos;
-	tempSize = 0;
-	memcpy(mem + memPos, &tempSize, 4);
-	memPos += 4;
 
 	// DLL-Name schreiben
 	addrInjectDLLPath = memProcAddrVal + memPos;
@@ -259,7 +253,7 @@ void InjectDLL(HANDLE process, const char* dllPath, const char* dllFunc)
 		// push addr
 		// -> Adresse vom Fehlertext auf den Stack legen
 		mem[memPos++] = 0x68;
-		memcpy(mem + memPos, &addrInjectError1, 4);
+		memcpy(mem + memPos, &addrInjectError2, 4);
 		memPos += 4;
 
 		// push 0
