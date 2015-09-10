@@ -16,6 +16,10 @@ Rücksprungadressen (call-Befehl!) werden vom Stack genommen bei der Ausführung, 
 // Hilfsvariable zum Löschen von Stackeinträgen.
 DWORD _garbage = 0;
 
+// Gibt an, ob es sich bei dem aktuellen Bekehrungsvorgang um einen unendlich langen handeln soll (Lamaismus-Technologie).
+// Sollte keine Race-Conditions ergeben, da vermutlich ( :-D ) nur synchroner Zugriff. Ansonsten zuerst hier nach Crash-Ursachen suchen...
+BYTE _blockConversionFlag = 0;
+
 // Sprungziele
 DWORD _funcUnknown1 = 0x004C05B0;
 DWORD _funcGetString = 0x00562CB0; // Ruft offenbar einen String aus den Language-DLLs ab?
@@ -44,6 +48,8 @@ float AGE_RESOURCE_RITTER = 2.0f;
 float AGE_RESOURCE_IMPERIAL = 3.0f;
 float AGE_RESOURCE_RENAISSANCE = 4.0f;
 
+// Hilfskonstanten für Floating-Point-Operationen
+float FLOAT_0 = 0.0f;
 
 
 /* CODECAVE-FUNKTIONEN */
@@ -105,11 +111,11 @@ __declspec(naked) void CC_EnableSecondBuildingPage()
 	{
 		// Rücksprungadresse vom Stack holen und sichern
 		pop _retAddr_EnableSecondBuildingPage;
-
+		
 		// Hafen
 	hafen:
 		cmp word ptr[edx + 0x10], 45;
-		jne festung;
+		jne kloster;
 
 		// Zeitalter-ID abrufen
 		mov eax, [edi + 0x0C];
@@ -118,6 +124,25 @@ __declspec(naked) void CC_EnableSecondBuildingPage()
 
 		// Zeitalter prüfen
 		fcomp AGE_RESOURCE_DUNKEL;
+		fnstsw ax;
+		test ah, 0x41;
+		jne end;
+
+		// Button erstellen!
+		jmp create_button;
+		
+		// Kloster/Steinkreis
+	kloster:
+		cmp word ptr[edx + 0x10], 866;
+		jne festung;
+
+		// Zeitalter-ID abrufen
+		mov eax, [edi + 0x0C];
+		mov ecx, [eax + 0x000000A8];
+		fld dword ptr[ecx + 0x18];
+
+		// Zeitalter prüfen
+		fcomp AGE_RESOURCE_RITTER;
 		fnstsw ax;
 		test ah, 0x41;
 		jne end;
@@ -1408,13 +1433,210 @@ __declspec(naked) void CC_Renaissance13()
 	};
 }
 
+// Codecave-Funktion.
+// Deaktiviert die Bekehrung des Bundschuh-Bauern.
+__declspec(naked) void CC_DisableBundschuhConversion()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und verwerfen
+		pop _garbage;
+
+		// Pferd? (Klasse)
+		cmp dx, 61;
+		je disable;
+
+		// Bundschuh-Bauer? (ID)
+		cmp[ebx + 0x10], 1084;
+		jne not_matched;
+
+	disable:
+		// Einheit ist nicht bekehrbar
+		push 0x004B7CC0;
+		ret;
+
+	not_matched:
+		// Einheit hier nicht betrachtet
+		push 0x004B7D05;
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Macht Bekehrungen von bestimten Einheitentypen unendlich (Lamaismus/Buchdruck-Technologien).
+// Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die Bekehrungsresistenz mit dem Hilfswert 1000 addiert wird.
+// Diese Funktion bestimmt das Blockier-Flag, das von der nachfolgenden Funktion dann angewendet wird.
+int _conversionBlockConvertedValue;
+__declspec(naked) void CC_ConversionCalcBlockFlag()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und verwerfen
+		pop _garbage;
+
+		// Register sichern, werden hier in der Funktion fleißig überschrieben
+		// Jaaa, ziemlich verschwenderisch, aber Einfachheit siegt über Geschwindigkeit, und soo oft wird die Funktion nun nicht aufgerufen
+		push eax;
+		push ebx;
+		push ecx;
+		push edx;
+
+		// In EBX Einheitenklasse reinschreiben
+		mov ebx, [edx + 0x16];
+
+		// In CL kommt das ermittelte Blockier-Flag, Standardwert 0
+		xor ecx, ecx;
+
+		// Bekehrwiderstand abrufen
+		fld dword ptr[ebp + 0x00000134];
+
+		// Bekehrwiderstand in Ganzzahl konvertieren, Rundung ist hier egal, da die niedrigwertigen Bits ignoriert werden
+		fist _conversionBlockConvertedValue;
+		mov eax, _conversionBlockConvertedValue;
+		and eax, 0x0300; // 00000011 00000000 -> Bit #8 und #9
+
+		// Bit 8 pruefen: Militaereinheiten unbekehrbar
+		mov edx, 0x0100;
+		and edx, eax;
+		je check_bit9;
+
+		// Bit 8 gesetzt -> Opfer-Einheit-Klasse pruefen
+		cmp bx, 0; // Bogenschützen
+		je set_block_flag;
+		cmp bx, 6; // Infanterie
+		je set_block_flag;
+		cmp bx, 13; // B-Waffen
+		je set_block_flag;
+		cmp bx, 23; // Konquistadoren
+		je set_block_flag;
+		cmp bx, 24; // Kriegselefanten
+		je set_block_flag;
+		cmp bx, 26; // Schützenelefanten
+		je set_block_flag;
+		cmp bx, 35; // Petarden
+		je set_block_flag;
+		cmp bx, 36; // Ber. Bogenschützen
+		je set_block_flag;
+		cmp bx, 45; // Zw.-Hd. Schwertkämpfer
+		je set_block_flag;
+		cmp bx, 46; // Pikeniere
+		je set_block_flag;
+		cmp bx, 47; // Ber. Späher
+		je set_block_flag;
+		cmp bx, 50; // Speerkämpfer
+		je set_block_flag;
+		cmp bx, 51; // Gepackte B-Waffen
+		je set_block_flag;
+		cmp bx, 54; // Ungepackte B-Waffen
+		je set_block_flag;
+		cmp bx, 55; // Skorpione
+		je set_block_flag;
+		cmp bx, 56; // Raider?
+		je set_block_flag;
+		cmp bx, 57; // Berittener Raider?
+		je set_block_flag;
+
+		// Bit 9 pruefen: Zivileinheiten unbekehrbar
+	check_bit9:
+		mov edx, 0x0200;
+		and edx, eax;
+		je check_end;
+
+		// Bit 8 gesetzt -> Opfer-Einheit-Klasse pruefen
+		cmp bx, 2; // Handelsschiff
+		je set_block_flag;
+		cmp bx, 4; // Zivilist
+		je set_block_flag;
+		cmp bx, 19; // Marktkarren
+		je set_block_flag;
+		cmp bx, 21; // Fischkutter
+		je set_block_flag;
+		jmp check_end;
+
+	set_block_flag:
+		// Bekehrungs-Blockierungs-Flag setzen
+		mov cl, 1;
+
+	check_end:
+		// Flagwert zuweisen
+		mov _blockConversionFlag, cl;
+
+	calc_resistance:
+		// Wert in EAX zu float konvertieren und von der Bekehrwiderstand-Ressource abziehen, um tatsächlichen numerischen Bekehrwiderstand zu erhalten
+		mov _conversionBlockConvertedValue, eax;
+		fisub _conversionBlockConvertedValue;
+
+		// Bekehrwiderstand > 0?
+		fcom FLOAT_0;
+		fnstsw ax;
+		test ah, 64;
+
+		// Kleiner/Gleich 0 -> fertig
+		jne pop_float;
+
+		// Größer 0 -> auf bereits berechneten Widerstand addieren
+		fadd dword ptr[esp + 0x20];
+		fstp dword ptr[esp + 0x20];
+		jmp end;
+
+	pop_float:
+		// Wert vom FPU-Stack nehmen, da dieser vorhin nicht korrekt gepoppt wurde
+		fstp _garbage;
+
+	end:
+		// Register wiederherstellen
+		pop edx;
+		pop ecx;
+		pop ebx;
+		pop eax;
+
+		// Fertig
+		push 0x004B8676;
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Macht Bekehrungen von bestimmten Einheitentypen unendlich (Lamaismus/Buchdruck-Technologien).
+// Dies Funktion wendet das von der vorhergehenden Funktion gesetzte Blockier-Flag an.
+__declspec(naked) void CC_ConversionExecBlockFlag()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und verwerfen
+		pop _garbage;
+
+		// Blockier-Flag gesetzt?
+		cmp _blockConversionFlag, 1;
+		jne compare;
+
+		// Flag ist gesetzt => keine Bekehrung durchführen
+		mov edx, -1000;
+
+	compare:
+		// Vergleich durchführen
+		cmp[esp + 0x14], edx;
+		jg end_jump;
+
+		// Fertig, keinen "echten" Sprung machen
+		push 0x004B8739;
+		ret;
+
+	end_jump:
+		// Fertig, springen wie im Original vorgesehen
+		push 0x004B887F;
+		ret;
+	};
+}
+
+
 /* DLL-FUNKTIONEN */
 
 // DLL-Einstiegspunkt.
 int WINAPI DllMain(HMODULE hModule, DWORD ulReason, LPVOID lpReserved)
 {
 	// DLL-Thread-Messages unterbinden
-	if(ulReason == DLL_PROCESS_ATTACH)
+	if (ulReason == DLL_PROCESS_ATTACH)
 		DisableThreadLibraryCalls(hModule);
 
 	// Immer laden
@@ -1444,6 +1666,9 @@ extern "C" __declspec(dllexport) void Init()
 	CreateCodecave(0x0043698E, CC_Renaissance11, 28);
 	CreateCodecave(0x004DFE40, CC_Renaissance12, 35);
 	CreateCodecave(0x004ED2CE, CC_Renaissance13, 85);
+	CreateCodecave(0x004B7CBA, CC_DisableBundschuhConversion, 1);
+	CreateCodecave(0x004B8655, CC_ConversionCalcBlockFlag, 1);
+	CreateCodecave(0x004B872F, CC_ConversionExecBlockFlag, 5);
 
 	// 457FC0 ist in die Renaissance-Codecave 10 gewandert
 	CreateCodecave(0x00427291, CC_Renaissance10, 0);
@@ -1495,6 +1720,24 @@ extern "C" __declspec(dllexport) void Init()
 	CopyBytesToAddr(0x00529A76, patch, 2);
 
 	// TODO: Einzelne Memory-Patches bei 2667+ (90er-Werte)?
+
+	// Cheat-Ressourcenmengen vergrößern
+	union
+	{
+		float val;
+		BYTE bytes[4];
+	} cheatResourceAmount;
+	cheatResourceAmount.val = 10000;
+	CopyBytesToAddr(0x0042C2AE, cheatResourceAmount.bytes, 4);
+	CopyBytesToAddr(0x0042C2CE, cheatResourceAmount.bytes, 4);
+	CopyBytesToAddr(0x0042C2EE, cheatResourceAmount.bytes, 4);
+	CopyBytesToAddr(0x0042C30E, cheatResourceAmount.bytes, 4);
+
+	// Haus-Sonderbehandlung entfernen, damit auch dort Technologien entwickelt werden können
+	BYTE nopPatch[11] = { 0x66, 0x90, 0x66, 0x90, 0x90, 0x66, 0x90, 0x66, 0x90, 0x66, 0x90 }; // 2-Byte NOPs benutzen
+	CopyBytesToAddr(0x004C8FBC, nopPatch, 11);
+	patch[0] = 0;
+	CopyBytesToAddr(0x004C8C7E, patch, 1);
 
 	// Fenster-Titel ändern für Preview
 	char *patchTitle = "X2-AddOn Beta Dev Preview\0\0";
