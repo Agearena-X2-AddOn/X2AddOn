@@ -64,20 +64,30 @@ __declspec(naked) void CC_ExtendSelfHealing()
 		// Rücksprungadresse vom Stack holen und sichern
 		pop _retAddr_ExtendSelfHealing;
 
+		// Sicherheitshalber EAX sichern
+		push eax;
+
 		// Berserker
-		cmp ax, 0x02B4;
+		cmp ax, 692;
 		je id_found;
 
 		// Elite-Berserker
-		cmp ax, 0x02B6;
+		cmp ax, 694;
 		je id_found;
 
 		// Amazone
-		cmp ax, 0x0387;
+		cmp ax, 903;
 		je id_found;
 
 		// Drachentöter
-		cmp ax, 0x03C6;
+		cmp ax, 966;
+		je id_found;
+
+		// Für Upgrade-Einheiten ist ID2 interessant
+		mov ax, [edx + 0x12];
+
+		// Selbstheilender Mönch
+		cmp ax, 1088;
 		je id_found;
 
 		// ID nicht gefunden, al auf 0 setzen
@@ -93,6 +103,9 @@ __declspec(naked) void CC_ExtendSelfHealing()
 	end:
 		// Ergebnisvergleich von al durchführen (Gleichheit => ID gefunden)
 		cmp al, 0x01;
+
+		// EAX wiederherstellen
+		pop eax;
 
 		// Rücksprungadresse wieder auf den Stack legen
 		push _retAddr_ExtendSelfHealing;
@@ -111,7 +124,7 @@ __declspec(naked) void CC_EnableSecondBuildingPage()
 	{
 		// Rücksprungadresse vom Stack holen und sichern
 		pop _retAddr_EnableSecondBuildingPage;
-		
+
 		// Hafen
 	hafen:
 		cmp word ptr[edx + 0x10], 45;
@@ -130,7 +143,7 @@ __declspec(naked) void CC_EnableSecondBuildingPage()
 
 		// Button erstellen!
 		jmp create_button;
-		
+
 		// Kloster/Steinkreis
 	kloster:
 		cmp word ptr[edx + 0x10], 866;
