@@ -32,10 +32,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	// nostartup: Keine Videos am Anfang
 	_snprintf_s(exepath, MAX_STRING_LENGTH, MAX_STRING_LENGTH, "\"%s\\age2_x1.exe\" game=X2AddOn_1 nostartup", workdir);
 
-	// Pfad zur DLL
-	char dllpath[MAX_STRING_LENGTH + 1] = { 0 };
-	_snprintf_s(dllpath, MAX_STRING_LENGTH, MAX_STRING_LENGTH, "age2_x2.dll");
-
 	// Prozessstart-Variablen
 	STARTUPINFO si = { sizeof(STARTUPINFO) };
 	PROCESS_INFORMATION pi = { 0 };
@@ -54,7 +50,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		return -1;
 	}
 
-	// DLL-Injection durchführen
+	// Haupt-DLL-Injection durchführen
+	char dllpath[MAX_STRING_LENGTH + 1] = { 0 };
+	_snprintf_s(dllpath, MAX_STRING_LENGTH, MAX_STRING_LENGTH, "age2_x2.dll");
+	InjectDLL(pi.hProcess, dllpath, "Init");
+
+	// TechTree-DLL-Injection durchführen
+	_snprintf_s(dllpath, MAX_STRING_LENGTH, MAX_STRING_LENGTH, "TechTree.dll");
 	InjectDLL(pi.hProcess, dllpath, "Init");
 	
 	// Prozess-Ausführung beginnen

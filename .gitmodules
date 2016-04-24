@@ -1,0 +1,3 @@
+[submodule "AoETechTree"]
+	path = AoETechTree
+	url = git@github.com:Janworks/AoETechTree.git
