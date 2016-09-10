@@ -83,6 +83,18 @@ __declspec(naked) void CC_ExtendSelfHealing()
 		cmp ax, 966;
 		je id_found;
 
+		// Shaolin
+		cmp ax, 930;
+		je id_found;
+		cmp ax, 1123;
+		je id_found;
+
+		// Elite-Shaolin
+		cmp ax, 932;
+		je id_found;
+		cmp ax, 1124;
+		je id_found;
+
 		// Für Upgrade-Einheiten ist ID2 interessant
 		mov ax, [edx + 0x12];
 
@@ -109,6 +121,286 @@ __declspec(naked) void CC_ExtendSelfHealing()
 
 		// Rücksprungadresse wieder auf den Stack legen
 		push _retAddr_ExtendSelfHealing;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Fügt dem Shaolin den Heil-Button hinzu.
+DWORD _retAddr_CreateShaolinHealingButton = 0;
+__declspec(naked) void CC_CreateShaolinHealingButton()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_CreateShaolinHealingButton;
+
+		// ID holen
+		mov eax, [ecx + 0x08];
+		mov ax, [eax + 0x10];
+
+		// Shaolin?
+		cmp ax, 930;
+		je create_shaolin_healing_button;
+		cmp ax, 932;
+		je create_shaolin_healing_button;
+		cmp ax, 1123;
+		je create_shaolin_healing_button;
+		cmp ax, 1124;
+		jne end;
+
+	create_shaolin_healing_button:
+		// Button erstellen
+		push 0x00;
+		push 0x00;
+		push 0x00;
+		push 0x00;
+		push 0x00;
+		push 0xFFFFFFFF;
+		push 4924; // Hilfetext
+		push 0x00;
+		push 28; // Code
+		push 15; // Heilen-Icon
+		push 14; // Unten rechts in der Ecke platzieren
+		mov eax, [esi + 0x00001020];
+		push eax;
+		mov edi, ecx;
+		mov ecx, esi;
+		call _funcCreateButton;
+		mov ecx, edi;
+		
+	end:
+		// Überschriebene Befehle ausführen
+		mov eax, [esp + 0x20];
+		xor edi, edi;
+
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_CreateShaolinHealingButton;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave - Funktion.
+// Erlaubt die Ausführung der Heiltätigkeit beim Shaolin.
+DWORD _retAddr_EnableShaolinHealingAbility = 0;
+__declspec(naked) void CC_EnableShaolinHealingAbility()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_EnableShaolinHealingAbility;
+
+		// Überschriebenen Sprung durchführen
+		je end;
+
+		// Shaolin?
+		cmp word ptr[ecx + 0x10], 930;
+		je end;
+		cmp word ptr[ecx + 0x10], 932;
+		je end;
+		cmp word ptr[ecx + 0x10], 1123;
+		je end;
+		cmp word ptr[ecx + 0x10], 1124;
+		je end;
+
+	no_match:
+		// Zu Standard-Behandlung springen
+		push 0x00434CDF;
+		ret;
+
+	end:
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_EnableShaolinHealingAbility;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave - Funktion.
+// Sorgt dafür, dass der Shaolin trotz Heilfunktion weiterhin Kämpfen zugewiesen kann.
+DWORD _retAddr_KeepShaolinFightingAbility = 0;
+__declspec(naked) void CC_KeepShaolinFightingAbility()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_KeepShaolinFightingAbility;
+
+		// ID holen
+		mov ecx, [esp + 0x30];
+		mov cx, [ecx + 0x10];
+
+		// Shaolin?
+		cmp cx, 930;
+		je end;
+		cmp cx, 932;
+		je end;
+		cmp cx, 1123;
+		je end;
+		cmp cx, 1124;
+		je end;
+
+	no_match:
+		// Programmverlauf normal fortsetzen, überschriebene Befehle ausführen
+		xor ecx, ecx;
+		movsx esi, [eax + 0x08];
+		push _retAddr_KeepShaolinFightingAbility;
+		ret;
+
+	end:
+		// Register in richtigen Zustand bringen
+		mov ecx, [esp + 0x30];
+		movsx ax, [ecx + 0x16];
+		mov ebp, [esp + 0x2C];
+
+		// Zu anderweitiger Behandlung springen
+		push 0x00434CDF;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Setzt das Heilflag beim Shaolin.
+DWORD _retAddr_SetShaolinHealingFlag = 0;
+__declspec(naked) void CC_SetShaolinHealingFlag()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_SetShaolinHealingFlag;
+
+		// Shaolin?
+		cmp word ptr[ebx + 0x10], 930;
+		je add_healing_flag;
+		cmp word ptr[ebx + 0x10], 932;
+		je add_healing_flag;
+		cmp word ptr[ebx + 0x10], 1123;
+		je add_healing_flag;
+		cmp word ptr[ebx + 0x10], 1124;
+		jne end;
+		
+	add_healing_flag:
+		// Flag setzen
+		or dl, 0x10;
+
+		// Restliche Abfragen überspringen, treffen eh nicht mehr zu
+		push 0x0045AD59;
+		ret;
+
+	end:
+		// Überschriebenen Befehl ausführen
+		cmp word ptr[ebx + 0x10], 0x0D;
+
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_SetShaolinHealingFlag;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Ändert die ID-Abfrage zur Reliquienablage im Kloster (EAX-Version).
+DWORD _retAddr_UpdateRelicDepositId1 = 0;
+__declspec(naked) void CC_UpdateRelicDepositId1()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_UpdateRelicDepositId1;
+
+		// Basiseinheit Steinkreis?
+		cmp word ptr[eax + 0x14], 866;
+
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_UpdateRelicDepositId1;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Ändert die ID-Abfrage zur Reliquienablage im Kloster (ECX-Version).
+DWORD _retAddr_UpdateRelicDepositId2 = 0;
+__declspec(naked) void CC_UpdateRelicDepositId2()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_UpdateRelicDepositId2;
+
+		// Basiseinheit Steinkreis?
+		cmp word ptr[ecx + 0x14], 866;
+
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_UpdateRelicDepositId2;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Ändert die ID-Abfrage zur Reliquienablage im Kloster (EDX-Version).
+DWORD _retAddr_UpdateRelicDepositId3 = 0;
+__declspec(naked) void CC_UpdateRelicDepositId3()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_UpdateRelicDepositId3;
+
+		// Basiseinheit Steinkreis?
+		cmp word ptr[edx + 0x14], 866;
+
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_UpdateRelicDepositId3;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Ändert die ID-Abfrage zur Reliquienablage im Kloster (Cursor-Abfrage).
+DWORD _retAddr_UpdateRelicDepositId4 = 0;
+__declspec(naked) void CC_UpdateRelicDepositId4()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_UpdateRelicDepositId4;
+
+		// Einheit Steinkreis?
+		cmp ebx, 866;
+		je found;
+
+		// Einheit Kloster?
+		cmp ebx, 30;
+		je found;
+		cmp ebx, 31;
+		je found;
+		cmp ebx, 32;
+		je found;
+		cmp ebx, 104;
+		jne not_found;
+
+	found:
+		// Gefunden, direkt zu Cursorzuweisung hinspringen
+		push 0x0045B851;
+		ret;
+
+	not_found:
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_UpdateRelicDepositId4;
 
 		// Fertig
 		ret;
@@ -207,7 +499,7 @@ __declspec(naked) void CC_EnableSecondBuildingPage()
 }
 
 // Codecave-Funktion.
-// Aktiviert die Ausladefunktion für die Transportkutsche unabhängig von der Einheitenklasse.
+// Aktiviert die Ausladefunktion für die Transportkutsche. Das Verhalten ist dasselbe wie bei Rammen, jedoch mit anderem Icon.
 DWORD _retAddr_TransportCartUnloadIcon = 0;
 __declspec(naked) void CC_TransportCartUnloadIcon()
 {
@@ -242,7 +534,7 @@ __declspec(naked) void CC_TransportCartUnloadIcon()
 		// Block für das Transportschiff
 	branch_ship:
 		mov eax, [ecx];
-		call dword ptr[eax + 0x00000218];
+		call dword ptr[eax + 0x00000218]; // Prüft, ob Schiff Ladung hat
 		test eax, eax;
 		jg create_button_ship;
 		jmp label1;
@@ -250,7 +542,7 @@ __declspec(naked) void CC_TransportCartUnloadIcon()
 		// Block für die Transportkutsche
 	branch_cart:
 		mov eax, [ecx];
-		call dword ptr[eax + 0x00000218];
+		call dword ptr[eax + 0x00000218]; // Prüft, ob Kutsche Ladung hat
 		test eax, eax;
 		jg create_button_cart;
 
@@ -292,8 +584,8 @@ __declspec(naked) void CC_TransportCartUnloadIcon()
 		mov eax, ecx;
 		push 0x00;
 		inc ecx;
-		push 0x07;
-		push 0x45;
+		push 0xAC; // Command-Code
+		push 0x45; // Icon-ID
 		jmp end;
 
 		// Abbrechen (falsche ID o.ä.)
@@ -1477,7 +1769,7 @@ __declspec(naked) void CC_DisableBundschuhConversion()
 
 // Codecave-Funktion.
 // Macht Bekehrungen von bestimten Einheitentypen unendlich (Lamaismus/Buchdruck-Technologien).
-// Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die Bekehrungsresistenz mit dem Hilfswert 1000 addiert wird.
+// Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die Bekehrungsresistenz mit dem Hilfswert 0x100 bzw. 0x200 addiert wird.
 // Diese Funktion bestimmt das Blockier-Flag, das von der nachfolgenden Funktion dann angewendet wird.
 int _conversionBlockConvertedValue;
 __declspec(naked) void CC_ConversionCalcBlockFlag()
@@ -1664,6 +1956,14 @@ extern "C" __declspec(dllexport) void Init()
 
 	// Codecaves erstellen
 	CreateCodecave(0x004C1795, CC_ExtendSelfHealing, 5);
+	CreateCodecave(0x00525B2E, CC_CreateShaolinHealingButton, 1);
+	CreateCodecave(0x00434AC6, CC_EnableShaolinHealingAbility, 1);
+	CreateCodecave(0x00434B2E, CC_KeepShaolinFightingAbility, 1);
+	CreateCodecave(0x0045AD35, CC_SetShaolinHealingFlag, 0);
+	CreateCodecave(0x004B165E, CC_UpdateRelicDepositId1, 0);
+	CreateCodecave(0x004B17BA, CC_UpdateRelicDepositId3, 0);
+	CreateCodecave(0x004B198E, CC_UpdateRelicDepositId2, 0);
+	CreateCodecave(0x0045B70D, CC_UpdateRelicDepositId4, 4);
 	CreateCodecave(0x00528307, CC_EnableSecondBuildingPage, 69);
 	CreateCodecave(0x00525F58, CC_TransportCartUnloadIcon, 103);
 	CreateCodecave(0x0045B7D1, CC_TransportCartLoadCommand, 18);
