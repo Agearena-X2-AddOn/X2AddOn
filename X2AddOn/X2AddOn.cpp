@@ -30,7 +30,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	// EXE-Parameter mit Pfad verknüpfen
 	// nostartup: Keine Videos am Anfang
-	_snprintf_s(exepath, MAX_STRING_LENGTH, MAX_STRING_LENGTH, "\"%s\\age2_x1.exe\" game=X2AddOn_1 nostartup", workdir);
+	_snprintf_s(exepath, MAX_STRING_LENGTH, MAX_STRING_LENGTH, "\"%s\\age2_x1.exe\" game=AgearenaAddOn nostartup", workdir);
 
 	// Prozessstart-Variablen
 	STARTUPINFO si = { sizeof(STARTUPINFO) };
@@ -52,7 +52,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	// Haupt-DLL-Injection durchführen
 	char dllpath[MAX_STRING_LENGTH + 1] = { 0 };
-	_snprintf_s(dllpath, MAX_STRING_LENGTH, MAX_STRING_LENGTH, "age2_x2.dll");
+	_snprintf_s(dllpath, MAX_STRING_LENGTH, MAX_STRING_LENGTH, "AgearenaAddOn.dll");
 	InjectDLL(pi.hProcess, dllpath, "Init");
 
 	// TechTree-DLL-Injection durchführen

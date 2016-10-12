@@ -16,9 +16,19 @@ Rücksprungadressen (call-Befehl!) werden vom Stack genommen bei der Ausführung, 
 // Hilfsvariable zum Löschen von Stackeinträgen.
 DWORD _garbage = 0;
 
-// Gibt an, ob es sich bei dem aktuellen Bekehrungsvorgang um einen unendlich langen handeln soll (Lamaismus-Technologie).
-// Sollte keine Race-Conditions ergeben, da vermutlich ( :-D ) nur synchroner Zugriff. Ansonsten zuerst hier nach Crash-Ursachen suchen...
-BYTE _blockConversionFlag = 0;
+// Spezifiziert den Bekehrungsmodus.
+// -> 0: Normal bekehren
+// -> 1: Unendliche Bekehrung (Lamaismus-Technologie)
+// -> 2: "Belohnung" nach Bekehrung eines Transport-/Handelsschiffs (Prise-Technologie)
+// -> 3: "Belohnung" nach Bekehrung eines Kriegsschiffs (Prise-Technologie)
+// Auf diese Variable wird nur innerhalb eines Funktionsdurchlaufs zugegriffen, es sind also keine Zugriffskonflikte zu erwarten.
+BYTE _conversionModeFlag = 0;
+
+// Gibt an, ob der Bekehrungswiderstandsfaktor für bestimmte Schiffstypen angewandt werden soll (Finkennetze-Technologie).
+// -> 0: Nicht anwenden
+// -> 1: Zwischenwert, noch nicht anwenden
+// -> 2: Anwenden
+BYTE _conversionResistForSpecificShips;
 
 // Sprungziele
 DWORD _funcUnknown1 = 0x004C05B0;
@@ -47,6 +57,9 @@ float AGE_RESOURCE_FEUDAL = 1.0f;
 float AGE_RESOURCE_RITTER = 2.0f;
 float AGE_RESOURCE_IMPERIAL = 3.0f;
 float AGE_RESOURCE_RENAISSANCE = 4.0f;
+
+// Bekehrungszeit-Summand für Finkennetze-Technologie
+float CONVERSION_TIME_SUMMAND_FINK_NETS = 6.0f;
 
 // Hilfskonstanten für Floating-Point-Operationen
 float FLOAT_0 = 0.0f;
@@ -170,7 +183,7 @@ __declspec(naked) void CC_CreateShaolinHealingButton()
 		mov ecx, esi;
 		call _funcCreateButton;
 		mov ecx, edi;
-		
+
 	end:
 		// Überschriebene Befehle ausführen
 		mov eax, [esp + 0x20];
@@ -285,7 +298,7 @@ __declspec(naked) void CC_SetShaolinHealingFlag()
 		je add_healing_flag;
 		cmp word ptr[ebx + 0x10], 1124;
 		jne end;
-		
+
 	add_healing_flag:
 		// Flag setzen
 		or dl, 0x10;
@@ -529,6 +542,8 @@ __declspec(naked) void CC_TransportCartUnloadIcon()
 		// Transportkutsche-ID?
 		cmp word ptr[edx + 0x10], 954;
 		je branch_cart;
+		cmp word ptr[edx + 0x10], 1076;
+		je branch_cart;
 		jmp label1;
 
 		// Block für das Transportschiff
@@ -612,19 +627,23 @@ __declspec(naked) void CC_TransportCartLoadCommand()
 		pop _retAddr_TransportCartLoadCommand;
 
 		// Rammbock?
-		cmp eax, 0x23;
+		cmp ax, 35;
 		je end;
 
 		// Sturmbock?
-		cmp eax, 0x000001A6;
+		cmp ax, 422;
 		je end;
 
 		// Belagerungsramme?
-		cmp eax, 0x00000224;
+		cmp eax, 548;
 		je end;
 
 		// Kleine Transportkutsche?
-		cmp eax, 0x000003BA;
+		cmp ax, 954;
+		je end;
+
+		// Große Transportkutsche?
+		cmp ax, 1076;
 		je end;
 
 		// Nicht gefunden, woanders hinspringen
@@ -1768,16 +1787,24 @@ __declspec(naked) void CC_DisableBundschuhConversion()
 }
 
 // Codecave-Funktion.
-// Macht Bekehrungen von bestimten Einheitentypen unendlich (Lamaismus/Buchdruck-Technologien).
-// Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die Bekehrungsresistenz mit dem Hilfswert 0x100 bzw. 0x200 addiert wird.
-// Diese Funktion bestimmt das Blockier-Flag, das von der nachfolgenden Funktion dann angewendet wird.
-int _conversionBlockConvertedValue;
-__declspec(naked) void CC_ConversionCalcBlockFlag()
+// -> Macht Bekehrungen von bestimten Einheitentypen unendlich (Lamaismus/Buchdruck-Technologien).
+//    Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die (ungenutzte) Ressource #68 des Bekehrungsopfers mit dem Hilfswert 0x10 bzw. 0x20 addiert wird.
+// -> Verlängert Bekehrungen von bestimmten Einheitentypen um 40% (hardcoded) (Finkennetze-Technologie)
+//    Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die (ungenutzte) Ressource #68 des Bekehrungsopfers mit dem Hilfswert 0x80 addiert wird.
+// -> Bestimmt die Auszahlung einer Belohnung beim Kapern eines Schiffes (Prise-Technologie).
+//    Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die (ungenutzte) Ressource #68 des Bekehrenden mit dem Hilfswert 0x40 addiert wird.
+// Diese Funktion bestimmt die zugehörigen Flags, die von der nachfolgenden Funktion dann angewendet werden.
+int _resource68ConvertedValue;
+int _conversionResistConvertedValue;
+__declspec(naked) void CC_ConversionCalcModeFlag()
 {
 	__asm
 	{
 		// Rücksprungadresse vom Stack holen und verwerfen
 		pop _garbage;
+
+		// Finkennetze-Technologie-Flag zurücksetzen
+		mov _conversionResistForSpecificShips, 0;
 
 		// Register sichern, werden hier in der Funktion fleißig überschrieben
 		// Jaaa, ziemlich verschwenderisch, aber Einfachheit siegt über Geschwindigkeit, und soo oft wird die Funktion nun nicht aufgerufen
@@ -1786,117 +1813,243 @@ __declspec(naked) void CC_ConversionCalcBlockFlag()
 		push ecx;
 		push edx;
 
-		// In EBX Einheitenklasse reinschreiben
-		mov ebx, [edx + 0x16];
+		// In EBX Klasse der Opfer-Einheit schreiben
+		mov bx, word ptr[edx + 0x16];
+
+		// In EDX Klasse der bekehrenden Einheit schreiben
+		mov dx, word ptr[edi + 0x16];
 
 		// In CL kommt das ermittelte Blockier-Flag, Standardwert 0
 		xor ecx, ecx;
 
-		// Bekehrwiderstand abrufen
-		fld dword ptr[ebp + 0x00000134];
+		// Ressource #68 des Bekehrungsopfers abrufen
+		fld dword ptr[ebp + 0x00000110]; // = 4 * 68
 
-		// Bekehrwiderstand in Ganzzahl konvertieren, Rundung ist hier egal, da die niedrigwertigen Bits ignoriert werden
-		fist _conversionBlockConvertedValue;
-		mov eax, _conversionBlockConvertedValue;
-		and eax, 0x0300; // 00000011 00000000 -> Bit #8 und #9
+		// Ressource #68 in Ganzzahl konvertieren (und vom FPU-Stack nehmen)
+		// Falls es Rundungsprobleme gibt, die Ressource auf einen Startwert 1 setzen, da dieses Bit ohnehin nie abgefragt wird
+		fistp _resource68ConvertedValue;
+		mov eax, _resource68ConvertedValue;
 
-		// Bit 8 pruefen: Militaereinheiten unbekehrbar
-		mov edx, 0x0100;
-		and edx, eax;
-		je check_bit9;
+		// Bit 4 des Opfer-Spielers pruefen: Militaereinheiten unbekehrbar
+		test ax, 0x0010;
+		je check_bit5;
 
-		// Bit 8 gesetzt -> Opfer-Einheit-Klasse pruefen
+		// Bit 4 gesetzt -> Opfer-Einheit-Klasse pruefen
 		cmp bx, 0; // Bogenschützen
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 6; // Infanterie
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 13; // B-Waffen
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 23; // Konquistadoren
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 24; // Kriegselefanten
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 26; // Schützenelefanten
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 35; // Petarden
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 36; // Ber. Bogenschützen
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 45; // Zw.-Hd. Schwertkämpfer
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 46; // Pikeniere
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 47; // Ber. Späher
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 50; // Speerkämpfer
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 51; // Gepackte B-Waffen
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 54; // Ungepackte B-Waffen
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 55; // Skorpione
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 56; // Raider?
-		je set_block_flag;
+		je set_mode_flag1;
 		cmp bx, 57; // Berittener Raider?
-		je set_block_flag;
+		je set_mode_flag1;
 
-		// Bit 9 pruefen: Zivileinheiten unbekehrbar
-	check_bit9:
-		mov edx, 0x0200;
-		and edx, eax;
+		// Bit 5 des Opfer-Spielers pruefen: Zivileinheiten unbekehrbar
+	check_bit5:
+		test ax, 0x0020;
+		je check_bit7;
+
+		// Bit 5 gesetzt -> Opfer-Einheit-Klasse pruefen
+		cmp bx, 2; // Handelsschiff
+		je set_mode_flag1;
+		cmp bx, 4; // Zivilist
+		je set_mode_flag1;
+		cmp bx, 19; // Marktkarren
+		je set_mode_flag1;
+		cmp bx, 21; // Fischkutter
+		je set_mode_flag1;
+
+		// Bit 7 des Opfer-Spielers pruefen: Galeeren- und Karackenlinien schwerer bekehrbar
+	check_bit7:
+		test ax, 0x0080;
+		je check_bit6;
+
+		// Merken, dass Bit gesetzt => wird später angewandt
+		mov _conversionResistForSpecificShips, 1;
+
+		// Bit 6 des bekehrenden Spielers pruefen: Prise-Technologie ("Belohnung" nach Bekehrung durch Kaperschiffe)
+	check_bit6:
+		// Ressource #68 des Bekehrenden abrufen
+		mov eax, dword ptr[esi + 0x08];
+		mov eax, dword ptr[eax + 0x0C];
+		mov eax, dword ptr[eax + 0xA8];
+		fld dword ptr[eax + 0x00000110]; // = 4 * 68
+		fistp _resource68ConvertedValue;
+		mov eax, _resource68ConvertedValue;
+		test ax, 0x0040;
 		je check_end;
 
-		// Bit 8 gesetzt -> Opfer-Einheit-Klasse pruefen
+		// Bit 6 gesetzt -> Bekehrungs-Einheit-Klasse pruefen
+		cmp dx, 53; // Kaperschiff
+		jne check_end;
+
+		// Opfer-Einheit-Klasse pruefen, um Prisenwert bestimmen zu können
 		cmp bx, 2; // Handelsschiff
-		je set_block_flag;
-		cmp bx, 4; // Zivilist
-		je set_block_flag;
-		cmp bx, 19; // Marktkarren
-		je set_block_flag;
-		cmp bx, 21; // Fischkutter
-		je set_block_flag;
+		je set_mode_flag2;
+		cmp bx, 20; // Transportschiff
+		je set_mode_flag2;
+		cmp bx, 22; // Kriegsschiff
+		je set_mode_flag3;
 		jmp check_end;
 
-	set_block_flag:
+	set_mode_flag1:
 		// Bekehrungs-Blockierungs-Flag setzen
 		mov cl, 1;
+		jmp check_end;
+
+	set_mode_flag2:
+		// Prisen-Flag setzen
+		mov cl, 2;
+		jmp check_end;
+
+	set_mode_flag3:
+		// Prisen-Flag setzen
+		mov cl, 3;
+		jmp check_end;
+
+	set_mode_flag4:
+		// Bekehrung erschweren-Flag setzen
+		mov cl, 4;
 
 	check_end:
 		// Flagwert zuweisen
-		mov _blockConversionFlag, cl;
+		mov _conversionModeFlag, cl;
 
-	calc_resistance:
-		// Wert in EAX zu float konvertieren und von der Bekehrwiderstand-Ressource abziehen, um tatsächlichen numerischen Bekehrwiderstand zu erhalten
-		mov _conversionBlockConvertedValue, eax;
-		fisub _conversionBlockConvertedValue;
-
-		// Bekehrwiderstand > 0?
-		fcom FLOAT_0;
-		fnstsw ax;
-		test ah, 64;
-
-		// Kleiner/Gleich 0 -> fertig
-		jne pop_float;
-
-		// Größer 0 -> auf bereits berechneten Widerstand addieren
-		fadd dword ptr[esp + 0x20];
-		fstp dword ptr[esp + 0x20];
-		jmp end;
-
-	pop_float:
-		// Wert vom FPU-Stack nehmen, da dieser vorhin nicht korrekt gepoppt wurde
-		fstp _garbage;
-
-	end:
-		// Register wiederherstellen
+		// Zuerst EDX-Register wiederherstellen, wird eventuell benötigt
 		pop edx;
+
+		// Bekehrwiderstand abrufen
+		fld dword ptr[ebp + 0x00000134]; // = 4 * 77
+
+		// Auf bereits berechneten Widerstand addieren
+		fadd dword ptr[esp + 0x20];
+
+		// Ggf. Spezialwiderstand addieren? (Finkennetze)
+		cmp _conversionResistForSpecificShips, 1;
+		jne calc_resistance_end;
+
+		// ID der Opfer-Einheit bestimmen
+		mov bx, word ptr[edx + 0x10];
+		cmp bx, 1121; // Karacke
+		je set_fink_net_resistance_flag;
+		cmp bx, 1122; // Gepanzerte Karacke
+		je set_fink_net_resistance_flag;
+		cmp bx, 442; // Galeone
+		je set_fink_net_resistance_flag;
+		cmp bx, 1116; // Galeere
+		je set_fink_net_resistance_flag;
+		cmp bx, 1117; // Kriegsgaleere
+		je set_fink_net_resistance_flag;
+		cmp bx, 1118; // Große Kriegsgaleere
+		je set_fink_net_resistance_flag;
+		cmp bx, 1112; // Galeasse
+		jne calc_resistance_end;
+
+	set_fink_net_resistance_flag:
+		// Flag aktualisieren
+		mov _conversionResistForSpecificShips, 2;
+
+	calc_resistance_end:
+		// Geänderten Widerstand in lokale Variable legen
+		fstp dword ptr[esp + 0x1C];
+
+		// Restliche Register wiederherstellen
 		pop ecx;
 		pop ebx;
 		pop eax;
 
 		// Fertig
 		push 0x004B8676;
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Verlängert ggf. die Maximalzeit einer Bekehrung (Finkennetze-Technologie).
+__declspec(naked) void CC_ConversionModifyMaximumTimeCalculation()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und verwerfen
+		pop _garbage;
+
+		// Minimalwerte addieren
+		fld dword ptr[ecx + 0x2C0];
+		fadd dword ptr[ebp + 0x2C8];
+		fadd st, st(1);
+
+		// Flag prüfen
+		cmp _conversionResistForSpecificShips, 2;
+		jne check_minimum;
+
+		// Minimalwert-Summand anwenden
+		fadd dword ptr[CONVERSION_TIME_SUMMAND_FINK_NETS];
+
+	check_minimum:
+		// Prüfung durchführen
+		fld dword ptr[esi + 0x48];
+		fcompp;
+		fnstsw ax;
+		test ah, 1;
+		fstp st;
+		je mimimum_reached;
+
+		// Minimalwert noch nicht erreicht, auf keinen Fall bekehren
+		mov edx, 0x0FFFFFC18;
+		jmp end;
+
+		// Minimalwert erreicht -> Maximalwert überschritten?
+	mimimum_reached:
+		fld dword ptr[ecx + 0x2C4];
+		fadd dword ptr[ebp + 0x2CC];
+		fadd dword ptr[esp + 0x10];
+
+		// Flag prüfen
+		cmp _conversionResistForSpecificShips, 2;
+		jne check_maximum;
+
+		// Maximalwert-Summand anwenden
+		fadd dword ptr[CONVERSION_TIME_SUMMAND_FINK_NETS];
+
+	check_maximum:
+		// Prüfung durchführen
+		fcomp dword ptr[esi + 0x48];
+		fnstsw ax;
+		test ah, 0x41;
+		je end; // Maximalwert noch nicht überschritten
+
+		// Maximalwert überschritten, auf jeden Fall bekehren
+		mov edx, 0x3E8;
+
+	end:
+		// Direkt zurückspringen
+		push 0x004B872F;
 		ret;
 	};
 }
@@ -1912,7 +2065,7 @@ __declspec(naked) void CC_ConversionExecBlockFlag()
 		pop _garbage;
 
 		// Blockier-Flag gesetzt?
-		cmp _blockConversionFlag, 1;
+		cmp _conversionModeFlag, 1;
 		jne compare;
 
 		// Flag ist gesetzt => keine Bekehrung durchführen
@@ -1920,7 +2073,7 @@ __declspec(naked) void CC_ConversionExecBlockFlag()
 
 	compare:
 		// Vergleich durchführen
-		cmp[esp + 0x14], edx;
+		cmp dword ptr[esp + 0x14], edx;
 		jg end_jump;
 
 		// Fertig, keinen "echten" Sprung machen
@@ -1934,6 +2087,56 @@ __declspec(naked) void CC_ConversionExecBlockFlag()
 	};
 }
 
+// Codecave-Funktion.
+// Überweist die Bekehrungs-"Belohnung" im Fall der "Prise"-Technologie.
+// Dies Funktion wendet das von der vorhergehenden Funktion gesetzte Blockier-Flag an.
+DWORD _retAddr_ConversionApplyCaptureResources = 0;
+__declspec(naked) void CC_ConversionApplyCaptureResources()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und verwerfen
+		pop _retAddr_ConversionApplyCaptureResources;
+
+		// Überschriebene Befehle ausführen, um Adresse der Virtual Function Table des Spielerobjekts zu bekommen (-> EDX-Register)
+		mov ecx, [eax + 0x0C];
+		mov edx, [ecx];
+
+		// Belohnungs-Flag für Transport-/Handelsschiffe gesetzt?
+		cmp _conversionModeFlag, 2;
+		jne case_warship;
+
+		// Flag ist gesetzt => Belohnung auszahlen
+		push 0; // Unbekannter Parameter
+		push 0x42C80000; // Menge: 100.0f
+		push 3; // Ressourcen-ID: Gold
+		call dword ptr[edx + 0x78];
+		jmp revert_registers;
+
+	case_warship:
+		// Belohnungs-Flag für Kriegsschiffe gesetzt?
+		cmp _conversionModeFlag, 3;
+		jne end;
+
+		// Flag ist gesetzt => Belohnung auszahlen
+		push 0; // Unbekannter Parameter
+		push 0x42480000; // Menge: 50.0f
+		push 3; // Ressourcen-ID: Gold
+		call dword ptr[edx + 0x78];
+
+	revert_registers:
+		// Überschriebene Befehle erneut ausführen, da Registerwerte ggf. verlorengegangen
+		mov eax, [esi + 0x08];
+		mov ecx, [eax + 0x0C];
+		mov edx, [ecx];
+
+	end:
+		// Fertig
+		push _retAddr_ConversionApplyCaptureResources;
+		ret;
+	};
+}
+
 
 /* DLL-FUNKTIONEN */
 
@@ -1941,7 +2144,7 @@ __declspec(naked) void CC_ConversionExecBlockFlag()
 int WINAPI DllMain(HMODULE hModule, DWORD ulReason, LPVOID lpReserved)
 {
 	// DLL-Thread-Messages unterbinden
-	if (ulReason == DLL_PROCESS_ATTACH)
+	if(ulReason == DLL_PROCESS_ATTACH)
 		DisableThreadLibraryCalls(hModule);
 
 	// Immer laden
@@ -1980,8 +2183,10 @@ extern "C" __declspec(dllexport) void Init()
 	CreateCodecave(0x004DFE40, CC_Renaissance12, 35);
 	CreateCodecave(0x004ED2CE, CC_Renaissance13, 85);
 	CreateCodecave(0x004B7CBA, CC_DisableBundschuhConversion, 1);
-	CreateCodecave(0x004B8655, CC_ConversionCalcBlockFlag, 1);
+	CreateCodecave(0x004B8655, CC_ConversionCalcModeFlag, 1);
+	CreateCodecave(0x004B86ED, CC_ConversionModifyMaximumTimeCalculation, 0);
 	CreateCodecave(0x004B872F, CC_ConversionExecBlockFlag, 5);
+	CreateCodecave(0x004B8845, CC_ConversionApplyCaptureResources, 0);
 
 	// 457FC0 ist in die Renaissance-Codecave 10 gewandert
 	CreateCodecave(0x00427291, CC_Renaissance10, 0);
@@ -2054,7 +2259,7 @@ extern "C" __declspec(dllexport) void Init()
 	CopyBytesToAddr(0x004C8C7E, patch, 1);
 
 	// Fenster-Titel ändern für Preview
-	char *patchTitle = "X2-AddOn Beta Dev Preview\0\0";
+	char *patchTitle = "Agearena AddOn Dev Preview\0\0";
 	CopyBytesToAddr(0x0067B838, patchTitle, 27);
 }
 
