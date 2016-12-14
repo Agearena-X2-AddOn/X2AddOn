@@ -30,7 +30,7 @@ BYTE _conversionModeFlag = 0;
 // -> 2: Anwenden
 BYTE _conversionResistForSpecificShips;
 
-// Sprungziele
+// Sprungziele.
 DWORD _funcUnknown1 = 0x004C05B0;
 DWORD _funcGetString = 0x00562CB0; // Ruft offenbar einen String aus den Language-DLLs ab?
 DWORD _funcFormatString = 0x0061442B; // Scheint zwei Strings mithilfe eines Formatstrings zu kombinieren?
@@ -44,26 +44,29 @@ DWORD _funcUnknown5 = 0x00403A2E;
 DWORD _funcUnknown6 = 0x0040244D;
 DWORD _funcCreateButton = 0x00520620; // Erstellt einen neuen Einheiten-Interface-Button.
 
-// Zeitalter-Konstanten
+// Zeitalter-Konstanten.
 float RESEARCH_ID_DUNKEL = 105.0f;
 float RESEARCH_ID_FEUDAL = 101.0f;
 float RESEARCH_ID_RITTER = 102.0f;
 float RESEARCH_ID_IMPERIAL = 103.0f;
 float RESEARCH_ID_RENAISSANCE = 104.0f;
 
-// Zeitalter-Konstanten für Zeitalter-Ressource
+// Zeitalter-Konstanten für Zeitalter-Ressource.
 float AGE_RESOURCE_DUNKEL = 0.0f;
 float AGE_RESOURCE_FEUDAL = 1.0f;
 float AGE_RESOURCE_RITTER = 2.0f;
 float AGE_RESOURCE_IMPERIAL = 3.0f;
 float AGE_RESOURCE_RENAISSANCE = 4.0f;
 
-// Bekehrungszeit-Summand für Finkennetze-Technologie
+// Bekehrungszeit-Summand für Finkennetze-Technologie.
 float CONVERSION_TIME_SUMMAND_FINK_NETS = 6.0f;
 
-// Hilfskonstanten für Floating-Point-Operationen
+// Hilfskonstanten für Floating-Point-Operationen.
 float FLOAT_0 = 0.0f;
+float FLOAT_1 = 1.0f;
 
+// Vergrößerter Puffer für Language-DLL-Strings.
+static char _newLanguageDllStringBuffer[768];
 
 /* CODECAVE-FUNKTIONEN */
 
@@ -280,14 +283,14 @@ __declspec(naked) void CC_KeepShaolinFightingAbility()
 }
 
 // Codecave-Funktion.
-// Setzt das Heilflag beim Shaolin.
-DWORD _retAddr_SetShaolinHealingFlag = 0;
-__declspec(naked) void CC_SetShaolinHealingFlag()
+// Setzt das Heilflag beim Shaolin und löscht das Angriffsflag bei den Transportkutschen.
+DWORD _retAddr_SetShaolinHealingFlagAndRemoveTransportCartAttackFlag = 0;
+__declspec(naked) void CC_SetShaolinHealingFlagAndRemoveTransportCartAttackFlag()
 {
 	__asm
 	{
 		// Rücksprungadresse vom Stack holen und sichern
-		pop _retAddr_SetShaolinHealingFlag;
+		pop _retAddr_SetShaolinHealingFlagAndRemoveTransportCartAttackFlag;
 
 		// Shaolin?
 		cmp word ptr[ebx + 0x10], 930;
@@ -297,13 +300,27 @@ __declspec(naked) void CC_SetShaolinHealingFlag()
 		cmp word ptr[ebx + 0x10], 1123;
 		je add_healing_flag;
 		cmp word ptr[ebx + 0x10], 1124;
+		je add_healing_flag;
+
+		// Transportkutsche?
+		cmp word ptr[ebx + 0x10], 954;
+		je remove_attack_flag;
+		cmp word ptr[ebx + 0x10], 1076;
 		jne end;
+
+	remove_attack_flag:
+		// Flag löschen
+		and dl, 0xFE;
+
+		// Restliche Abfragen überspringen, treffen eh nicht mehr zu
+		push 0x0045AD59;
+		ret;
 
 	add_healing_flag:
 		// Flag setzen
 		or dl, 0x10;
 
-		// Restliche Abfragen überspringen, treffen eh nicht mehr zu
+		// Restliche Abfragen überspringen
 		push 0x0045AD59;
 		ret;
 
@@ -312,7 +329,220 @@ __declspec(naked) void CC_SetShaolinHealingFlag()
 		cmp word ptr[ebx + 0x10], 0x0D;
 
 		// Rücksprungadresse wieder auf den Stack legen
-		push _retAddr_SetShaolinHealingFlag;
+		push _retAddr_SetShaolinHealingFlagAndRemoveTransportCartAttackFlag;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Führt beim Shaolin bei gescheiteter Auto-Attack-Zielfindung die Auto-Heal-Zielfindung aus.
+DWORD _retAddr_EnableShaolinAutoHeal = 0;
+__declspec(naked) void CC_EnableShaolinAutoHeal()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_EnableShaolinAutoHeal;
+
+		// Auto-Attack-Rückgabewert -1 (keine Einheit gefunden)?
+		cmp edi, -1;
+		jne end;
+
+		// ID holen
+		mov eax, dword ptr[esi + 0x04]; // this->UnitInstance
+		mov eax, dword ptr[eax + 0x08]; // this->UnitInstance->UnitData
+		mov ax, word ptr[eax + 0x10]; // this->UnitInstance->UnitData->ID1
+
+		// Shaolin?
+		cmp ax, 930;
+		je run_auto_heal;
+		cmp ax, 932;
+		je run_auto_heal;
+		cmp ax, 1123;
+		je run_auto_heal;
+		cmp ax, 1124;
+		jne end;
+
+	run_auto_heal:
+		// VTable-Adresse austauschen (andere Klasse)
+		mov dword ptr[esi], 0x00638DE8;
+
+		// Entsprechende virtuelle Funktion für automatische Heilung aufrufen
+		push 1;
+		mov ecx, esi;
+		mov edx, [ecx];
+		call dword ptr[edx + 0xDC];
+
+		// VTable-Adresse zurücksetzen, falls keine Heilung zustandegekommen
+		cmp eax, 6; // 5, falls keine Heilung
+		je return_function;
+		mov dword ptr[esi], 0x0063919C;
+
+	return_function:
+		// Rückgabewert liegt bereits in EAX
+		pop edi;
+		pop esi;
+		add esp, 0x0C;
+		retn 4;
+
+	end:
+		// Überschriebenen Befehl ausführen
+		cmp dword ptr[esi + 0x28], 0x02C7;
+
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_EnableShaolinAutoHeal;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Überschreibt einen Patch vom UserPatch. Sorgt für einen korrekten Zielfindungsradius beim Heilen, verhindert jedoch das Weglaufen des Shaolins.
+DWORD _retAddr_PatchShaolinAutoHealDistanceCalculation = 0;
+__declspec(naked) void CC_PatchShaolinAutoHealDistanceCalculation()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_PatchShaolinAutoHealDistanceCalculation;
+
+		// Einheiteninstanz abrufen
+		mov ecx, dword ptr[esi + 0x04]; // this->UnitInstance
+
+		// Grunddistanz laden (Ressource #90 der Spieler-Civ)
+		mov eax, dword ptr[ecx + 0x0C]; // this->UnitInstance->PlayerData
+		mov eax, dword ptr[eax + 0xA8]; // this->UnitInstance->PlayerData->CivResources
+		fld dword ptr[eax + 360]; // this->UnitInstance->PlayerData->CivResources[90] (float-Array)
+
+		// ID holen
+		mov eax, dword ptr[ecx + 0x08]; // this->UnitInstance->UnitData
+		mov ax, word ptr[eax + 0x10]; // this->UnitInstance->UnitData->ID1
+
+		// Shaolin?
+		cmp ax, 930;
+		je end;
+		cmp ax, 932;
+		je end;
+		cmp ax, 1123;
+		je end;
+		cmp ax, 1124;
+		je end;
+
+	add_walk_range:
+		// Extra-Reichweite zum "Hinlaufen" addieren
+		fadd FLOAT_1;
+
+	end:
+		// Reichweitenwert speichern
+		fstp dword ptr[esp + 0x18];
+
+		// Überschriebenen Befehl ausführen
+		mov ecx, esi;
+
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_PatchShaolinAutoHealDistanceCalculation;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Führt beim Shaolin bei gescheiteter Auto-Attack-Zielfindung die Auto-Heal-Zielfindung aus.
+// TODO: ID-Test notwendig? Erstmal auskommentiert, bei Fehlern wieder einkommentieren.
+DWORD _retAddr_PatchShaolinHealAssignmentBehaviour = 0;
+__declspec(naked) void CC_PatchShaolinHealAssignmentBehaviour()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_PatchShaolinHealAssignmentBehaviour;
+
+		// ID holen
+		mov ecx, dword ptr[esi + 0x08]; // this->UnitInstance (in ECX, da für VTable-Austausch noch notwendig)
+		/*
+		mov eax, dword ptr[ecx + 0x08]; // this->UnitInstance->UnitData
+		mov ax, word ptr[ecx + 0x10]; // this->UnitInstance->UnitData->ID1
+
+		// Shaolin?
+		cmp ax, 930;
+		je set_behaviour_vtable;
+		cmp ax, 932;
+		je set_behaviour_vtable;
+		cmp ax, 1123;
+		je set_behaviour_vtable;
+		cmp ax, 1124;
+		jne end;
+		*/
+	set_behaviour_vtable:
+		// VTable-Adresse austauschen (andere Klasse)
+		mov eax, dword ptr[ecx + 0x6C];
+		mov dword ptr[eax], 0x00638DE8;
+
+	end:
+		// Überschriebenene Befehle ausführen
+		mov ecx, dword ptr[esp + 0x0C];
+		mov eax, esi;
+
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_PatchShaolinHealAssignmentBehaviour;
+
+		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Sorgt dafür, dass der Shaolin bei abgebrochener Heilung (Einheit hat sich entfernt o.ä.) wieder in den korrekten Ausgangszustand wechselt.
+DWORD _retAddr_EnableShaolinAutoHealEnd = 0;
+__declspec(naked) void CC_EnableShaolinAutoHealEnd()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und sichern
+		pop _retAddr_EnableShaolinAutoHealEnd;
+
+		// ID holen
+		mov edx, dword ptr[esi + 0x04]; // this->UnitInstance
+		mov edx, dword ptr[edx + 0x08]; // this->UnitInstance->UnitData
+		mov dx, word ptr[edx + 0x10]; // this->UnitInstance->UnitData->ID1
+
+		// Shaolin?
+		cmp dx, 930;
+		je end_auto_heal;
+		cmp dx, 932;
+		je end_auto_heal;
+		cmp dx, 1123;
+		je end_auto_heal;
+		cmp dx, 1124;
+		jne default_function_call;
+
+	end_auto_heal:
+		// VTable-Adresse austauschen (andere Klasse)
+		//mov dword ptr[esi], 0x00638DE8;
+
+		// Überschriebenen Funktionsaufruf durchführen
+		call dword ptr[eax + 0xD8];
+
+		// VTable-Adresse zurücksetzen, falls keine Einheit mehr geheilt wird
+		mov edx, dword ptr[esi + 0x34]; // this->InteractionUnitInstanceId
+		cmp edx, -1;
+		jne end;
+		mov dword ptr[esi], 0x0063919C;
+
+		// Fertig, zum Ende
+		jmp end;
+
+	default_function_call:
+		// Überschriebenen Funktionsaufruf durchführen
+		call dword ptr[eax + 0xD8];
+
+	end:
+		// Rücksprungadresse wieder auf den Stack legen
+		push _retAddr_EnableShaolinAutoHealEnd;
 
 		// Fertig
 		ret;
@@ -654,6 +884,47 @@ __declspec(naked) void CC_TransportCartLoadCommand()
 		push _retAddr_TransportCartLoadCommand;
 
 		// Fertig
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Unterdrückt die Auto-Attack bei den Transportkutschen.
+__declspec(naked) void CC_DisableTransportCartAutoAttack()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen und verwerfen
+		pop _garbage;
+
+		// Einheiten-ID abrufen
+		mov eax, [esi + 0x04]; // this->UnitInstance
+		mov eax, [eax + 0x08]; // this->UnitInstance->UnitData
+
+		// Kleine Transportkutsche
+		cmp word ptr[eax + 0x10], 954; // this->UnitInstance->UnitData->ID1
+		je disable_auto_attack;
+
+		// Große Transportkutsche
+		cmp word ptr[eax + 0x10], 1076;
+		jne end;
+
+	disable_auto_attack:
+		// Überschriebenen Befehl ausführen
+		mov[esp + 0x14], 4;
+
+		// Restliche Anweisungen überspringen
+		push 0x005EFA7B;
+		ret;
+
+	end:
+		// Überschriebene Befehle ausführen
+		mov eax, 4;
+		cmp edi, eax;
+		mov[esp + 0x14], eax;
+
+		// Fertig
+		push 0x005EF6F3;
 		ret;
 	};
 }
@@ -2137,6 +2408,128 @@ __declspec(naked) void CC_ConversionApplyCaptureResources()
 	};
 }
 
+// Codecave-Funktion.
+// Verändert die Maximalhöhe der Hilfetext-Box.
+__declspec(naked) void CC_ExtendHelpTextBox()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen
+		pop eax;
+
+		// Überschriebenen Befehl ausführen
+		push 0;
+
+		// Neue Höhe auf den Stack legen
+		push 140;
+		push 140;
+
+		// Fertig
+		push eax;
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Sorgt dafür, dass der Mineur nach Selbstsprengung nicht wiederbelebt wird.
+DWORD _retAddr_EnableMineurSelfDestroy1 = 0;
+__declspec(naked) void CC_EnableMineurSelfDestroy1()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen
+		pop _retAddr_EnableMineurSelfDestroy1;
+
+		// Überschriebenen Befehl ausführen
+		cmp ax, 440; // Petarde
+		je self_destroy_handler;
+
+		// Mineur
+		cmp ax, 1064;
+		jne end;
+
+	self_destroy_handler:
+		// Zum Selbstzerstörungshandler springen
+		push _retAddr_EnableMineurSelfDestroy1;
+		ret;
+
+	end:
+		// Handler überspringen
+		push 0x004C16B6;
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Sorgt dafür, dass der Mineur nach Selbstsprengung nicht wiederbelebt wird.
+DWORD _retAddr_EnableMineurSelfDestroy2 = 0;
+__declspec(naked) void CC_EnableMineurSelfDestroy2()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen
+		pop _retAddr_EnableMineurSelfDestroy2;
+
+		// Überschriebenen Befehl ausführen
+		cmp ax, 440; // Petarde
+		je self_destroy_handler;
+
+		// Mineur
+		cmp ax, 1064;
+		jne end;
+
+	self_destroy_handler:
+		// Zum Selbstzerstörungshandler springen
+		push _retAddr_EnableMineurSelfDestroy2;
+		ret;
+
+	end:
+		// Handler überspringen
+		push 0x004C2D1F;
+		ret;
+	};
+}
+
+// Codecave-Funktion.
+// Sorgt dafür, dass die "Ketzerei"-Technologie nicht mehr auf Schiffe wirkt.
+DWORD _retAddr_DisableShipDestructionOnConversion = 0;
+__declspec(naked) void CC_DisableShipDestructionOnConversion()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen
+		pop _retAddr_DisableShipDestructionOnConversion;
+
+		// Klasse abrufen
+		mov eax, dword ptr[ecx + 0x08]; // this->UnitData
+		mov ax, word ptr[eax + 0x16]; // this->UnitData->Class
+
+		// Klasse prüfen
+		cmp ax, 2; // Handelsschiff
+		je convert_unit;
+		cmp ax, 20; // Transportschiff
+		je convert_unit;
+		cmp ax, 21; // Fischkutter
+		je convert_unit;
+		cmp ax, 22; // Kriegsschiff
+		je convert_unit;
+		cmp ax, 53; // Kaperschiff
+		je convert_unit;
+
+		// Aufruf ausführen: Einheit töten
+		call dword ptr[edx + 0x74];
+
+		// Fertig, überschriebenen JMP-Befehl ausführen
+		push 0x004B8839;
+		ret;
+
+	convert_unit:
+		// Einheit doch bekehren
+		push _retAddr_DisableShipDestructionOnConversion;
+		ret;
+	};
+}
+
 
 /* DLL-FUNKTIONEN */
 
@@ -2162,7 +2555,11 @@ extern "C" __declspec(dllexport) void Init()
 	CreateCodecave(0x00525B2E, CC_CreateShaolinHealingButton, 1);
 	CreateCodecave(0x00434AC6, CC_EnableShaolinHealingAbility, 1);
 	CreateCodecave(0x00434B2E, CC_KeepShaolinFightingAbility, 1);
-	CreateCodecave(0x0045AD35, CC_SetShaolinHealingFlag, 0);
+	CreateCodecave(0x0045AD35, CC_SetShaolinHealingFlagAndRemoveTransportCartAttackFlag, 0);
+	CreateCodecave(0x0046FF43, CC_EnableShaolinAutoHeal, 2);
+	CreateCodecave(0x0046E051, CC_PatchShaolinAutoHealDistanceCalculation, 5);
+	CreateCodecave(0x004B4BB3, CC_PatchShaolinHealAssignmentBehaviour, 1);
+	CreateCodecave(0x005EEADE, CC_EnableShaolinAutoHealEnd, 1);
 	CreateCodecave(0x004B165E, CC_UpdateRelicDepositId1, 0);
 	CreateCodecave(0x004B17BA, CC_UpdateRelicDepositId3, 0);
 	CreateCodecave(0x004B198E, CC_UpdateRelicDepositId2, 0);
@@ -2170,6 +2567,7 @@ extern "C" __declspec(dllexport) void Init()
 	CreateCodecave(0x00528307, CC_EnableSecondBuildingPage, 69);
 	CreateCodecave(0x00525F58, CC_TransportCartUnloadIcon, 103);
 	CreateCodecave(0x0045B7D1, CC_TransportCartLoadCommand, 18);
+	CreateCodecave(0x005EF6E8, CC_DisableTransportCartAutoAttack, 6);
 	CreateCodecave(0x0040259A, CC_Renaissance1, 141);
 	CreateCodecave(0x005AAD61, CC_Renaissance2, 48);
 	CreateCodecave(0x0043FF59, CC_Renaissance3, 16);
@@ -2187,6 +2585,10 @@ extern "C" __declspec(dllexport) void Init()
 	CreateCodecave(0x004B86ED, CC_ConversionModifyMaximumTimeCalculation, 0);
 	CreateCodecave(0x004B872F, CC_ConversionExecBlockFlag, 5);
 	CreateCodecave(0x004B8845, CC_ConversionApplyCaptureResources, 0);
+	CreateCodecave(0x0051AF03, CC_ExtendHelpTextBox, 1);
+	CreateCodecave(0x004C1695, CC_EnableMineurSelfDestroy1, 1);
+	CreateCodecave(0x004C2CE6, CC_EnableMineurSelfDestroy2, 1);
+	CreateCodecave(0x004B8828, CC_DisableShipDestructionOnConversion, 0);
 
 	// 457FC0 ist in die Renaissance-Codecave 10 gewandert
 	CreateCodecave(0x00427291, CC_Renaissance10, 0);
@@ -2257,6 +2659,15 @@ extern "C" __declspec(dllexport) void Init()
 	CopyBytesToAddr(0x004C8FBC, nopPatch, 11);
 	patch[0] = 0;
 	CopyBytesToAddr(0x004C8C7E, patch, 1);
+	CopyBytesToAddr(0x004C7FE9, patch, 1);
+
+	// Neuen Language-DLL-String-Puffer installieren
+	DWORD newStringBufferAddress = reinterpret_cast<DWORD>(_newLanguageDllStringBuffer);
+	BYTE *newStringBufferAddressBytes = reinterpret_cast<BYTE *>(&newStringBufferAddress);
+	CopyBytesToAddr(0x00562CEA, newStringBufferAddressBytes, 4);
+	CopyBytesToAddr(0x00562CF5, newStringBufferAddressBytes, 4);
+	BYTE newStringBufferSize_SecondByte = 0x03; // Größe ist eigentlich 0x0300, es muss aber nur Byte 1 (vorher 0x02) durch 0x03 ausgetauscht werden, Byte 0 bleibt gleich
+	CopyBytesToAddr(0x00562CE6, &newStringBufferSize_SecondByte, 1);
 
 	// Fenster-Titel ändern für Preview
 	char *patchTitle = "Agearena AddOn Dev Preview\0\0";
