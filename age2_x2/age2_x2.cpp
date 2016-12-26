@@ -2530,6 +2530,63 @@ __declspec(naked) void CC_DisableShipDestructionOnConversion()
 	};
 }
 
+// Codecave-Funktion.
+// Falls die "Bauernhaufen"-Technologie entwickelt ist und ein Dorfbewohner ein Gebäude zerstört, wird der Wert aus dessen Unknown35-DAT-Variable dem Angreifer als Gold gutgeschrieben.
+// Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die (ungenutzte) Ressource #51 des Angreifers mit dem Hilfswert 0x10 addiert wird.
+int _resource51ConvertedValue;
+DWORD _retAddr_RewardBuildingDestruction = 0;
+__declspec(naked) void CC_RewardBuildingDestruction()
+{
+	__asm
+	{
+		// Rücksprungadresse vom Stack holen
+		pop _retAddr_RewardBuildingDestruction;
+
+		// Ressource #51 des Angreifers abrufen
+		mov eax, dword ptr[esi + 0xA8]; // attackingPlayer->CivResources
+		fld dword ptr[eax + 0x000000CC]; // = 4 * 51
+
+		// Ressource #51 in Ganzzahl konvertieren (und vom FPU-Stack nehmen)
+		// Falls es Rundungsprobleme gibt, die Ressource auf einen Startwert 1 setzen, da dieses Bit ohnehin nie abgefragt wird
+		fistp _resource51ConvertedValue;
+		mov eax, _resource51ConvertedValue;
+
+		// Bit 4 pruefen: Belohnung für durch Dorfbewohner zerstörte Gebäude
+		test ax, 0x0010;
+		je end;
+
+		// Hinweis: Typ der Opfer-Einheit braucht nicht geprüft werden, da Platzierung dieser Funktion innerhalb der virtuellen Schadensberechnungs-Funktion von Gebäude-Opfern,
+		// die auch nur von BuildingUnitInstance-Objekten verwendet wird
+
+		// Klasse der angreifenden Einheit abrufen
+		mov ecx, dword ptr[esp + 0x0C]; // attackingUnit
+		mov ecx, dword ptr[ecx + 0x08]; // attackingUnit->UnitData
+		mov cx, word ptr[ecx + 0x16]; // attackingUnit->UnitData->Class
+
+		// Dorfbewohner?
+		cmp cx, 4;
+		jne end;
+
+		// Wert aus Opfer-Einheit dem Angreifer gutschreiben (Nullwerte führen zu keiner Änderung)
+		mov ecx, dword ptr[edi + 0x08]; // this->UnitData
+		mov ecx, dword ptr[ecx + 0x210]; // this->UnitData->Unknown35
+		push 0; // Unbekannter Wert
+		push ecx; // Menge
+		push 3; // Als Gold gutschreiben
+		mov ecx, esi;
+		call dword ptr[edx + 0x78];
+
+		// VTable-Adresse wieder in EDX laden, wurde in Aufruf wahrscheinlich überschrieben
+		mov edx, [esi];
+
+	end:
+		// Überschriebenen Befehl ausführen, fertig
+		push 0xAA;
+		push _retAddr_RewardBuildingDestruction;
+		ret;
+	};
+}
+
 
 /* DLL-FUNKTIONEN */
 
@@ -2589,6 +2646,7 @@ extern "C" __declspec(dllexport) void Init()
 	CreateCodecave(0x004C1695, CC_EnableMineurSelfDestroy1, 1);
 	CreateCodecave(0x004C2CE6, CC_EnableMineurSelfDestroy2, 1);
 	CreateCodecave(0x004B8828, CC_DisableShipDestructionOnConversion, 0);
+	CreateCodecave(0x004CA6E8, CC_RewardBuildingDestruction, 0);
 
 	// 457FC0 ist in die Renaissance-Codecave 10 gewandert
 	CreateCodecave(0x00427291, CC_Renaissance10, 0);
