@@ -2059,11 +2059,13 @@ __declspec(naked) void CC_DisableBundschuhConversion()
 
 // Codecave-Funktion.
 // -> Macht Bekehrungen von bestimten Einheitentypen unendlich (Lamaismus/Buchdruck-Technologien).
-//    Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die (ungenutzte) Ressource #68 des Bekehrungsopfers mit dem Hilfswert 0x10 bzw. 0x20 addiert wird.
+//    Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die (ungenutzte) Ressource #68 des Bekehrungsopfers mit dem Hilfswert 0x0010 bzw. 0x0020 addiert wird.
 // -> Verlängert Bekehrungen von bestimmten Einheitentypen um 40% (hardcoded) (Finkennetze-Technologie)
-//    Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die (ungenutzte) Ressource #68 des Bekehrungsopfers mit dem Hilfswert 0x80 addiert wird.
+//    Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die (ungenutzte) Ressource #68 des Bekehrungsopfers mit dem Hilfswert 0x0080 addiert wird.
 // -> Bestimmt die Auszahlung einer Belohnung beim Kapern eines Schiffes (Prise-Technologie).
-//    Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die (ungenutzte) Ressource #68 des Bekehrenden mit dem Hilfswert 0x40 addiert wird.
+//    Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die (ungenutzte) Ressource #68 des Bekehrenden mit dem Hilfswert 0x0040 addiert wird.
+// -> Bestimmt die Auszahlung einer Belohnung beim Bekehren einer Einheit (Ablasshandel-Technologie).
+//    Hier wird davon ausgegangen, dass bei Entwicklung der Technologie die (ungenutzte) Ressource #68 des Bekehrenden mit dem Hilfswert 0x0100 addiert wird.
 // Diese Funktion bestimmt die zugehörigen Flags, die von der nachfolgenden Funktion dann angewendet werden.
 int _resource68ConvertedValue;
 int _conversionResistConvertedValue;
@@ -2174,11 +2176,11 @@ __declspec(naked) void CC_ConversionCalcModeFlag()
 		fistp _resource68ConvertedValue;
 		mov eax, _resource68ConvertedValue;
 		test ax, 0x0040;
-		je check_end;
+		je check_bit8;
 
 		// Bit 6 gesetzt -> Bekehrungs-Einheit-Klasse pruefen
 		cmp dx, 53; // Kaperschiff
-		jne check_end;
+		jne check_bit8;
 
 		// Opfer-Einheit-Klasse pruefen, um Prisenwert bestimmen zu können
 		cmp bx, 2; // Handelsschiff
@@ -2187,26 +2189,38 @@ __declspec(naked) void CC_ConversionCalcModeFlag()
 		je set_mode_flag2;
 		cmp bx, 22; // Kriegsschiff
 		je set_mode_flag3;
-		jmp check_end;
+
+		// Bit 8 des bekehrenden Spielers pruefen: Ablasshandel-Technologie ("Belohnung" nach Bekehrung)
+	check_bit8:
+		// Ressource #68 des Bekehrenden ist bereits geladen
+		test ax, 0x0100;
+		je check_end;
+
+		// Bit 7 gesetzt -> Bekehrungs-Einheit-Klasse pruefen
+		cmp dx, 18; // Mönch
+		jne check_end;
+
+		// Ablasshandel-Flag setzen
+		jmp set_mode_flag4;
 
 	set_mode_flag1:
 		// Bekehrungs-Blockierungs-Flag setzen
-		mov cl, 1;
+		mov cl, 0x01;
 		jmp check_end;
 
 	set_mode_flag2:
-		// Prisen-Flag setzen
-		mov cl, 2;
-		jmp check_end;
+		// Prisen-Flag setzen und Ablasshandel-Flag prüfen
+		mov cl, 0x02;
+		jmp check_bit8;
 
 	set_mode_flag3:
-		// Prisen-Flag setzen
-		mov cl, 3;
-		jmp check_end;
+		// Prisen-Flag setzen und Ablasshandel-Flag prüfen
+		mov cl, 0x04;
+		jmp check_bit8;
 
 	set_mode_flag4:
-		// Bekehrung erschweren-Flag setzen
-		mov cl, 4;
+		// Ablasshandel-Flag setzen
+		or cl, 0x08;
 
 	check_end:
 		// Flagwert zuweisen
@@ -2336,7 +2350,7 @@ __declspec(naked) void CC_ConversionExecBlockFlag()
 		pop _garbage;
 
 		// Blockier-Flag gesetzt?
-		cmp _conversionModeFlag, 1;
+		cmp _conversionModeFlag, 0x01;
 		jne compare;
 
 		// Flag ist gesetzt => keine Bekehrung durchführen
@@ -2359,7 +2373,7 @@ __declspec(naked) void CC_ConversionExecBlockFlag()
 }
 
 // Codecave-Funktion.
-// Überweist die Bekehrungs-"Belohnung" im Fall der "Prise"-Technologie.
+// Überweist die Bekehrungs-"Belohnung" im Fall der "Prise"- "Ablasshandel"-Technologien.
 // Dies Funktion wendet das von der vorhergehenden Funktion gesetzte Blockier-Flag an.
 DWORD _retAddr_ConversionApplyCaptureResources = 0;
 __declspec(naked) void CC_ConversionApplyCaptureResources()
@@ -2374,7 +2388,7 @@ __declspec(naked) void CC_ConversionApplyCaptureResources()
 		mov edx, [ecx];
 
 		// Belohnungs-Flag für Transport-/Handelsschiffe gesetzt?
-		cmp _conversionModeFlag, 2;
+		cmp _conversionModeFlag, 0x02;
 		jne case_warship;
 
 		// Flag ist gesetzt => Belohnung auszahlen
@@ -2386,7 +2400,19 @@ __declspec(naked) void CC_ConversionApplyCaptureResources()
 
 	case_warship:
 		// Belohnungs-Flag für Kriegsschiffe gesetzt?
-		cmp _conversionModeFlag, 3;
+		cmp _conversionModeFlag, 0x04;
+		jne case_else;
+
+		// Flag ist gesetzt => Belohnung auszahlen
+		push 0; // Unbekannter Parameter
+		push 0x42480000; // Menge: 50.0f
+		push 3; // Ressourcen-ID: Gold
+		call dword ptr[edx + 0x78];
+		jmp revert_registers;
+
+	case_else:
+		// Belohnungs-Flag für normale Bekehrungen gesetzt?
+		cmp _conversionModeFlag, 0x08;
 		jne end;
 
 		// Flag ist gesetzt => Belohnung auszahlen

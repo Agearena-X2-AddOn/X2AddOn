@@ -32,3 +32,4 @@ _ReSharper*/
 *.zip
 X2AddOn.VC.db
 X2AddOn.VC.VC.opendb
+.vs/*
