@@ -2080,7 +2080,7 @@ __declspec(naked) void CC_ConversionCalcModeFlag()
 		mov _conversionResistForSpecificShips, 0;
 
 		// Register sichern, werden hier in der Funktion fleißig überschrieben
-		// Jaaa, ziemlich verschwenderisch, aber Einfachheit siegt über Geschwindigkeit, und soo oft wird die Funktion nun nicht aufgerufen
+		// Jaaa, ziemlich verschwenderisch, aber Einfachheit siegt über Geschwindigkeit, und so oft wird die Funktion nicht aufgerufen
 		push eax;
 		push ebx;
 		push ecx;
@@ -2373,8 +2373,8 @@ __declspec(naked) void CC_ConversionExecBlockFlag()
 }
 
 // Codecave-Funktion.
-// Überweist die Bekehrungs-"Belohnung" im Fall der "Prise"- "Ablasshandel"-Technologien.
-// Dies Funktion wendet das von der vorhergehenden Funktion gesetzte Blockier-Flag an.
+// Überweist die Bekehrungs-"Belohnung" im Fall der "Prise"-/"Ablasshandel"-Technologien.
+// Diese Funktion wendet das von der vorhergehenden Funktion gesetzte Modus-Flag an.
 DWORD _retAddr_ConversionApplyCaptureResources = 0;
 __declspec(naked) void CC_ConversionApplyCaptureResources()
 {
@@ -2387,13 +2387,22 @@ __declspec(naked) void CC_ConversionApplyCaptureResources()
 		mov ecx, [eax + 0x0C];
 		mov edx, [ecx];
 
+		// Brite? -> Höhere Belohnung bei Schiffen
+		mov al, [ecx + 0x15D];
+
 		// Belohnungs-Flag für Transport-/Handelsschiffe gesetzt?
 		cmp _conversionModeFlag, 0x02;
 		jne case_warship;
 
 		// Flag ist gesetzt => Belohnung auszahlen
 		push 0; // Unbekannter Parameter
+		cmp al, 1;
+		je case_civilship_briton;
 		push 0x42C80000; // Menge: 100.0f
+		jmp case_civilship_add;
+	case_civilship_briton:
+		push 0x43050000; // Menge: 133.0f
+	case_civilship_add:
 		push 3; // Ressourcen-ID: Gold
 		call dword ptr[edx + 0x78];
 		jmp revert_registers;
@@ -2405,7 +2414,13 @@ __declspec(naked) void CC_ConversionApplyCaptureResources()
 
 		// Flag ist gesetzt => Belohnung auszahlen
 		push 0; // Unbekannter Parameter
+		cmp al, 1;
+		je case_warship_briton;
 		push 0x42480000; // Menge: 50.0f
+		jmp case_warship_add;
+	case_warship_briton:
+		push 0x42860000; // Menge: 67.0f
+	case_warship_add:
 		push 3; // Ressourcen-ID: Gold
 		call dword ptr[edx + 0x78];
 		jmp revert_registers;
@@ -2613,6 +2628,19 @@ __declspec(naked) void CC_RewardBuildingDestruction()
 	};
 }
 
+// Codecave-Funktion.
+// Ändert die Basis-ID des Reliquiengold-Gebäudes vom Kloster zum Steinkreis. Eine direkte Änderung der ID ist nicht möglich, da die neue ID 1 Byte breiter ist.
+// TODO: Nach ID-Finalisierung vielleicht nicht mehr? Wäre gut, da evtl. hohe Performance-Auswirkung.
+__declspec(naked) void CC_ReplaceRelicGoldBuildingId()
+{
+	__asm
+	{
+		// Überschriebenen Befehl mit korrekter ID ausführen
+		cmp word ptr[eax + 0x10], 866;
+		ret;
+	};
+}
+
 
 /* DLL-FUNKTIONEN */
 
@@ -2673,6 +2701,7 @@ extern "C" __declspec(dllexport) void Init()
 	CreateCodecave(0x004C2CE6, CC_EnableMineurSelfDestroy2, 1);
 	CreateCodecave(0x004B8828, CC_DisableShipDestructionOnConversion, 0);
 	CreateCodecave(0x004CA6E8, CC_RewardBuildingDestruction, 0);
+	CreateCodecave(0x004C90E5, CC_ReplaceRelicGoldBuildingId, 0);
 
 	// 457FC0 ist in die Renaissance-Codecave 10 gewandert
 	CreateCodecave(0x00427291, CC_Renaissance10, 0);
