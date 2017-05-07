@@ -651,6 +651,19 @@ __declspec(naked) void CC_UpdateRelicDepositId4()
 }
 
 // Codecave-Funktion.
+// Ändert die Basis-ID des Reliquiengold-Gebäudes vom Kloster zum Steinkreis. Eine direkte Änderung der ID ist nicht möglich, da die neue ID 1 Byte breiter ist.
+// TODO: Nach ID-Finalisierung vielleicht nicht mehr? Wäre gut, da evtl. hohe Performance-Auswirkung.
+__declspec(naked) void CC_UpdateRelicDepositId5()
+{
+	__asm
+	{
+		// Überschriebenen Befehl mit korrekter ID ausführen
+		cmp word ptr[eax + 0x10], 866;
+		ret;
+	};
+}
+
+// Codecave-Funktion.
 // Aktiviert die zweite Gebäude-Seite für gegebene Gebäude.
 DWORD _retAddr_EnableSecondBuildingPage = 0;
 __declspec(naked) void CC_EnableSecondBuildingPage()
@@ -2628,19 +2641,6 @@ __declspec(naked) void CC_RewardBuildingDestruction()
 	};
 }
 
-// Codecave-Funktion.
-// Ändert die Basis-ID des Reliquiengold-Gebäudes vom Kloster zum Steinkreis. Eine direkte Änderung der ID ist nicht möglich, da die neue ID 1 Byte breiter ist.
-// TODO: Nach ID-Finalisierung vielleicht nicht mehr? Wäre gut, da evtl. hohe Performance-Auswirkung.
-__declspec(naked) void CC_ReplaceRelicGoldBuildingId()
-{
-	__asm
-	{
-		// Überschriebenen Befehl mit korrekter ID ausführen
-		cmp word ptr[eax + 0x10], 866;
-		ret;
-	};
-}
-
 
 /* DLL-FUNKTIONEN */
 
@@ -2675,6 +2675,7 @@ extern "C" __declspec(dllexport) void Init()
 	CreateCodecave(0x004B17BA, CC_UpdateRelicDepositId3, 0);
 	CreateCodecave(0x004B198E, CC_UpdateRelicDepositId2, 0);
 	CreateCodecave(0x0045B70D, CC_UpdateRelicDepositId4, 4);
+	CreateCodecave(0x004C90E5, CC_UpdateRelicDepositId5, 0);
 	CreateCodecave(0x00528307, CC_EnableSecondBuildingPage, 69);
 	CreateCodecave(0x00525F58, CC_TransportCartUnloadIcon, 103);
 	CreateCodecave(0x0045B7D1, CC_TransportCartLoadCommand, 18);
@@ -2701,7 +2702,6 @@ extern "C" __declspec(dllexport) void Init()
 	CreateCodecave(0x004C2CE6, CC_EnableMineurSelfDestroy2, 1);
 	CreateCodecave(0x004B8828, CC_DisableShipDestructionOnConversion, 0);
 	CreateCodecave(0x004CA6E8, CC_RewardBuildingDestruction, 0);
-	CreateCodecave(0x004C90E5, CC_ReplaceRelicGoldBuildingId, 0);
 
 	// 457FC0 ist in die Renaissance-Codecave 10 gewandert
 	CreateCodecave(0x00427291, CC_Renaissance10, 0);
