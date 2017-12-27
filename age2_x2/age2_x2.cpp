@@ -658,6 +658,7 @@ __declspec(naked) void CC_UpdateRelicDepositId5()
 	__asm
 	{
 		// Überschriebenen Befehl mit korrekter ID ausführen
+		mov eax, dword ptr[esi + 0x08];
 		cmp word ptr[eax + 0x10], 866;
 		ret;
 	};
@@ -2485,66 +2486,6 @@ __declspec(naked) void CC_ExtendHelpTextBox()
 }
 
 // Codecave-Funktion.
-// Sorgt dafür, dass der Mineur nach Selbstsprengung nicht wiederbelebt wird.
-DWORD _retAddr_EnableMineurSelfDestroy1 = 0;
-__declspec(naked) void CC_EnableMineurSelfDestroy1()
-{
-	__asm
-	{
-		// Rücksprungadresse vom Stack holen
-		pop _retAddr_EnableMineurSelfDestroy1;
-
-		// Überschriebenen Befehl ausführen
-		cmp ax, 440; // Petarde
-		je self_destroy_handler;
-
-		// Mineur
-		cmp ax, 1064;
-		jne end;
-
-	self_destroy_handler:
-		// Zum Selbstzerstörungshandler springen
-		push _retAddr_EnableMineurSelfDestroy1;
-		ret;
-
-	end:
-		// Handler überspringen
-		push 0x004C16B6;
-		ret;
-	};
-}
-
-// Codecave-Funktion.
-// Sorgt dafür, dass der Mineur nach Selbstsprengung nicht wiederbelebt wird.
-DWORD _retAddr_EnableMineurSelfDestroy2 = 0;
-__declspec(naked) void CC_EnableMineurSelfDestroy2()
-{
-	__asm
-	{
-		// Rücksprungadresse vom Stack holen
-		pop _retAddr_EnableMineurSelfDestroy2;
-
-		// Überschriebenen Befehl ausführen
-		cmp ax, 440; // Petarde
-		je self_destroy_handler;
-
-		// Mineur
-		cmp ax, 1064;
-		jne end;
-
-	self_destroy_handler:
-		// Zum Selbstzerstörungshandler springen
-		push _retAddr_EnableMineurSelfDestroy2;
-		ret;
-
-	end:
-		// Handler überspringen
-		push 0x004C2D1F;
-		ret;
-	};
-}
-
-// Codecave-Funktion.
 // Sorgt dafür, dass die "Ketzerei"-Technologie nicht mehr auf Schiffe wirkt.
 DWORD _retAddr_DisableShipDestructionOnConversion = 0;
 __declspec(naked) void CC_DisableShipDestructionOnConversion()
@@ -2675,7 +2616,7 @@ extern "C" __declspec(dllexport) void Init()
 	CreateCodecave(0x004B17BA, CC_UpdateRelicDepositId3, 0);
 	CreateCodecave(0x004B198E, CC_UpdateRelicDepositId2, 0);
 	CreateCodecave(0x0045B70D, CC_UpdateRelicDepositId4, 4);
-	CreateCodecave(0x004C90E5, CC_UpdateRelicDepositId5, 0);
+	CreateCodecave(0x004C90E2, CC_UpdateRelicDepositId5, 3); // Von UserPatch verändert (nutzloses HD-Feature), wird hier überschrieben
 	CreateCodecave(0x00528307, CC_EnableSecondBuildingPage, 69);
 	CreateCodecave(0x00525F58, CC_TransportCartUnloadIcon, 103);
 	CreateCodecave(0x0045B7D1, CC_TransportCartLoadCommand, 18);
@@ -2698,8 +2639,6 @@ extern "C" __declspec(dllexport) void Init()
 	CreateCodecave(0x004B872F, CC_ConversionExecBlockFlag, 5);
 	CreateCodecave(0x004B8845, CC_ConversionApplyCaptureResources, 0);
 	CreateCodecave(0x0051AF03, CC_ExtendHelpTextBox, 1);
-	CreateCodecave(0x004C1695, CC_EnableMineurSelfDestroy1, 1);
-	CreateCodecave(0x004C2CE6, CC_EnableMineurSelfDestroy2, 1);
 	CreateCodecave(0x004B8828, CC_DisableShipDestructionOnConversion, 0);
 	CreateCodecave(0x004CA6E8, CC_RewardBuildingDestruction, 0);
 
@@ -2768,12 +2707,12 @@ extern "C" __declspec(dllexport) void Init()
 	CopyBytesToAddr(0x0042C30E, cheatResourceAmount.bytes, 4);
 
 	// Haus-Sonderbehandlung entfernen, damit auch dort Technologien entwickelt werden können
-	BYTE nopPatch[11] = { 0x66, 0x90, 0x66, 0x90, 0x90, 0x66, 0x90, 0x66, 0x90, 0x66, 0x90 }; // 2-Byte NOPs benutzen
-	CopyBytesToAddr(0x004C8FBC, nopPatch, 11);
+	// Überschreibt einfach nur Haus-ID #70 mit 0, u.a. auch in UserPatch-Routine
 	patch[0] = 0;
+	CopyBytesToAddr(0x007E1032, patch, 1);
 	CopyBytesToAddr(0x004C8C7E, patch, 1);
 	CopyBytesToAddr(0x004C7FE9, patch, 1);
-
+	
 	// Neuen Language-DLL-String-Puffer installieren
 	DWORD newStringBufferAddress = reinterpret_cast<DWORD>(_newLanguageDllStringBuffer);
 	BYTE *newStringBufferAddressBytes = reinterpret_cast<BYTE *>(&newStringBufferAddress);
