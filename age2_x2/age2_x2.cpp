@@ -68,6 +68,58 @@ float FLOAT_1 = 1.0f;
 // Vergrößerter Puffer für Language-DLL-Strings.
 static char _newLanguageDllStringBuffer[768];
 
+// Die Adressen, wo das Hauptspiel und der UserPatch die Adresse des Language-DLL-String-Puffers fest einprogrammiert haben => müssen alle ersetzt werden
+// Die Adressen sind aus Gründen der einfacheren Aktualisierbarkeit allesamt 1 Byte zu klein (Opcode).
+DWORD _hardcodedLanguageDllStringBufferAddresses[] =
+{
+	// age2_x1
+	0x00562CE9,
+	0x00562CF4,
+
+	// UserPatch
+	0x007B329B,
+	0x007B32B9,
+	0x007B330A,
+	0x007C4397,
+	0x007C43B0,
+	0x007C7064,
+	0x007C70D3,
+	0x007C70E3,
+	0x007C7232,
+	0x007C7257,
+	0x007C7268,
+	0x007C728D,
+	0x007C729E,
+	0x007C72C3,
+	0x007C72ED,
+	0x007C73A1,
+	0x007C73B0,
+	0x007C73F9,
+	0x007C743F,
+	0x007C745C,
+	0x007C747D,
+	0x007C7B3B,
+	0x007C800A,
+	0x007C8014,
+	0x007C8254,
+	0x007C8273,
+	0x007C8285,
+	0x007CBF70,
+	0x007CBF7E,
+	0x007D8FB4,
+	0x007D8FBE,
+	0x007D8FCF,
+	0x007E25E0,
+	0x007E794B,
+	0x007E797D,
+	0x007EB449,
+	0x007EB45C,
+	0x007EB5A5,
+	0x007EDEED,
+	0x007EDF0B,
+	0x007EDF21
+};
+
 /* CODECAVE-FUNKTIONEN */
 
 // Codecave-Funktion.
@@ -2537,6 +2589,15 @@ __declspec(naked) void CC_RewardBuildingDestruction()
 		// Rücksprungadresse vom Stack holen
 		pop _retAddr_RewardBuildingDestruction;
 
+		// Klasse der angreifenden Einheit abrufen
+		mov ecx, dword ptr[esp + 0x0C]; // attackingUnit
+		mov eax, dword ptr[ecx + 0x08]; // attackingUnit->UnitData
+		mov cx, word ptr[eax + 0x16]; // attackingUnit->UnitData->Class
+
+		// Dorfbewohner?
+		cmp cx, 4;
+		jne reward_raider;
+
 		// Ressource #51 des Angreifers abrufen
 		mov eax, dword ptr[esi + 0xA8]; // attackingPlayer->CivResources
 		fld dword ptr[eax + 0x000000CC]; // = 4 * 51
@@ -2553,20 +2614,33 @@ __declspec(naked) void CC_RewardBuildingDestruction()
 		// Hinweis: Typ der Opfer-Einheit braucht nicht geprüft werden, da Platzierung dieser Funktion innerhalb der virtuellen Schadensberechnungs-Funktion von Gebäude-Opfern,
 		// die auch nur von BuildingUnitInstance-Objekten verwendet wird
 
-		// Klasse der angreifenden Einheit abrufen
-		mov ecx, dword ptr[esp + 0x0C]; // attackingUnit
-		mov ecx, dword ptr[ecx + 0x08]; // attackingUnit->UnitData
-		mov cx, word ptr[ecx + 0x16]; // attackingUnit->UnitData->Class
-
-		// Dorfbewohner?
-		cmp cx, 4;
-		jne end;
-
+	reward_villager:
 		// Wert aus Opfer-Einheit dem Angreifer gutschreiben (Nullwerte führen zu keiner Änderung)
 		mov ecx, dword ptr[edi + 0x08]; // this->UnitData
 		mov ecx, dword ptr[ecx + 0x210]; // this->UnitData->Unknown35
 		push 0; // Unbekannter Wert
 		push ecx; // Menge
+		push 3; // Als Gold gutschreiben
+		mov ecx, esi;
+		call dword ptr[edx + 0x78];
+
+		// VTable-Adresse wieder in EDX laden, wurde in Aufruf wahrscheinlich überschrieben
+		mov edx, [esi];
+		jmp end;
+
+	reward_raider:
+		// Belohnungswert abrufen und prüfen
+		mov eax, dword ptr[eax + 0x190]; // attackingUnit->UnitData->FlankBonus (ungenutzte Variable)
+		test eax, eax;
+		je end;
+
+		// Falls Flag bei Opfereinheit gesetzt, dem Angreifer EAX Gold gutschreiben
+		mov ecx, dword ptr[edi + 0x08]; // this->UnitData
+		mov cl, byte ptr[ecx + 0x1D6]; // this->UnitData->Unknown33
+		test cl, 0x02;
+		je end;
+		push 0; // Unbekannter Wert
+		push eax; // Menge
 		push 3; // Als Gold gutschreiben
 		mov ecx, esi;
 		call dword ptr[edx + 0x78];
@@ -2712,17 +2786,20 @@ extern "C" __declspec(dllexport) void Init()
 	CopyBytesToAddr(0x007E1032, patch, 1);
 	CopyBytesToAddr(0x004C8C7E, patch, 1);
 	CopyBytesToAddr(0x004C7FE9, patch, 1);
-	
-	// Neuen Language-DLL-String-Puffer installieren
+
+	// Neuen Language-DLL-String-Puffer installieren (alte Adresse: 0x00785FB8)
 	DWORD newStringBufferAddress = reinterpret_cast<DWORD>(_newLanguageDllStringBuffer);
 	BYTE *newStringBufferAddressBytes = reinterpret_cast<BYTE *>(&newStringBufferAddress);
-	CopyBytesToAddr(0x00562CEA, newStringBufferAddressBytes, 4);
-	CopyBytesToAddr(0x00562CF5, newStringBufferAddressBytes, 4);
-	BYTE newStringBufferSize_SecondByte = 0x03; // Größe ist eigentlich 0x0300, es muss aber nur Byte 1 (vorher 0x02) durch 0x03 ausgetauscht werden, Byte 0 bleibt gleich
+	for(int i = 0; i < sizeof(_hardcodedLanguageDllStringBufferAddresses) / sizeof(DWORD); ++i)
+		CopyBytesToAddr(_hardcodedLanguageDllStringBufferAddresses[i] + 1, newStringBufferAddressBytes, 4);
+
+	// Language-DLL-String-Puffer-Größe ersetzen
+	// Größe ist eigentlich 0x0300, es muss aber nur Byte 1 (vorher 0x02) durch 0x03 ausgetauscht werden, Byte 0 bleibt gleich
+	BYTE newStringBufferSize_SecondByte = 0x03;
 	CopyBytesToAddr(0x00562CE6, &newStringBufferSize_SecondByte, 1);
 
 	// Fenster-Titel ändern für Preview
-	char *patchTitle = "Agearena AddOn Dev Preview\0\0";
+	char *patchTitle = "Agearena AddOn Preview\0\0\0\0\0\0";
 	CopyBytesToAddr(0x0067B838, patchTitle, 27);
 }
 
